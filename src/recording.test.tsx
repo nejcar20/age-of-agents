@@ -22,13 +22,27 @@ describe("recording mode", () => {
     expect(document.documentElement.dataset.recording).toBeUndefined();
   });
 
-  it("shows the REC badge briefly, then gets out of the shot", () => {
+  it("shows a way out on entering and on every pointer move, and fades it from a still shot", () => {
     vi.useFakeTimers();
     render(<RecordingProvider><Probe /></RecordingProvider>);
     press(window);
-    expect(screen.getByRole("status").textContent).toContain("REC");
+    const exit = screen.getByRole("button", { name: "Exit cinematic mode" });
+    expect(exit.className).toContain("recording-badge--shown");
     act(() => { vi.advanceTimersByTime(2000); });
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(exit.className).not.toContain("recording-badge--shown");
+    fireEvent.pointerMove(window);
+    expect(exit.className).toContain("recording-badge--shown");
+  });
+
+  it("leaves with Esc or the exit button, so nobody is trapped with every panel hidden", () => {
+    render(<RecordingProvider><Probe /></RecordingProvider>);
+    press(window);
+    press(window, { key: "Escape" });
+    expect(screen.getByTestId("state").textContent).toBe("off");
+    expect(screen.queryByRole("button", { name: "Exit cinematic mode" })).toBeNull();
+    press(window);
+    fireEvent.click(screen.getByRole("button", { name: "Exit cinematic mode" }));
+    expect(screen.getByTestId("state").textContent).toBe("off");
   });
 
   it("never steals a capital R typed into a terminal or a field", () => {

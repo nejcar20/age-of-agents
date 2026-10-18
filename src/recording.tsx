@@ -56,6 +56,24 @@ export function RecordingProvider({ children, initial = false }: { children: Rea
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // Esc leaves too: every panel is hidden in this mode, and Esc is the key
+  // people reach for when they are stuck in something full-screen. Captured
+  // first, so the same press does not also close or leave whatever is
+  // underneath.
+  useEffect(() => {
+    if (!recording) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || isModalOpen() || isInteractiveTarget(event.target)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setRecording(false);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [recording]);
+
+  // The way out shows on entering and whenever the pointer moves, then
+  // fades: a still shot stays clean, and nobody is left without an exit.
   useEffect(() => {
     const root = document.documentElement;
     if (!recording) {
@@ -64,10 +82,17 @@ export function RecordingProvider({ children, initial = false }: { children: Rea
       return;
     }
     root.dataset.recording = "1";
-    setShowBadge(true);
-    const timer = setTimeout(() => setShowBadge(false), REC_BADGE_MS);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const show = () => {
+      setShowBadge(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setShowBadge(false), REC_BADGE_MS);
+    };
+    show();
+    window.addEventListener("pointermove", show);
     return () => {
       clearTimeout(timer);
+      window.removeEventListener("pointermove", show);
       delete root.dataset.recording;
     };
   }, [recording]);
@@ -76,10 +101,15 @@ export function RecordingProvider({ children, initial = false }: { children: Rea
     <RecordingContext.Provider value={recording}>
       <RecordingToggleContext.Provider value={toggle}>
       {children}
-      {showBadge && (
-        <div className="recording-badge" role="status">
-          ● REC <small>⇧R to stop</small>
-        </div>
+      {recording && (
+        <button
+          type="button"
+          className={`recording-badge${showBadge ? " recording-badge--shown" : ""}`}
+          onClick={() => setRecording(false)}
+          aria-label="Exit cinematic mode"
+        >
+          ● Cinematic <small>Exit · Esc</small>
+        </button>
       )}
       </RecordingToggleContext.Provider>
     </RecordingContext.Provider>

@@ -1006,10 +1006,14 @@ body {
 }
 :root[data-recording] .scene-stage > :not(:first-child) { display: none !important; }
 .recording-badge {
-  position: fixed; top: 16px; right: 16px; z-index: 2147483001; pointer-events: none;
-  padding: 6px 12px; border-radius: 999px; background: rgba(16, 20, 26, 0.8); color: #ff5a5a;
+  position: fixed; top: 16px; right: 16px; z-index: 2147483001;
+  padding: 7px 14px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 999px;
+  background: rgba(16, 20, 26, 0.82); color: #ff5a5a; cursor: pointer;
   font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  opacity: 0; pointer-events: none; transition: opacity .35s ease;
 }
+.recording-badge--shown { opacity: 1; pointer-events: auto; }
+.recording-badge:hover { background: rgba(28, 34, 42, 0.92); }
 .recording-badge small { color: #c9d3da; font-weight: 400; margin-left: 6px; }
 
 /* "+42" over a building an agent just edited (TownView's GrowthLabels):
