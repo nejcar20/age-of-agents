@@ -191,6 +191,12 @@ export type SafeGroundOptions = {
   /** Paint a beach around the rectangle's own edge. Off when a coast
    * (`townCoast.ts`) surrounds the ground and provides the beach itself. */
   beachAtEdge?: boolean;
+  /** Shade the grass by the dome but keep the surface at y=0. A town's own
+   * ground sits under real buildings, roads and plots that all stand on
+   * y=0: a raised dome buried them toward the centre, sank buildings by up
+   * to `moundHeight` (so equal files looked unequal), and z-fought with the
+   * paths wherever the two heights met. */
+  flat?: boolean;
 };
 
 /**
@@ -204,7 +210,7 @@ export type SafeGroundOptions = {
  * where the shallow-water shelf begins.
  */
 export function buildSafeGroundGeometry(options: SafeGroundOptions): THREE.BufferGeometry {
-  const { width, depth, moundHeight, landColor, shadeColor, lightColor, sandColor, wetSandColor, beachAtEdge = true } = options;
+  const { width, depth, moundHeight, landColor, shadeColor, lightColor, sandColor, wetSandColor, beachAtEdge = true, flat = false } = options;
   const segments = 40;
   const geometry = new THREE.PlaneGeometry(width, depth, segments, segments);
   geometry.rotateX(-Math.PI / 2);
@@ -230,7 +236,7 @@ export function buildSafeGroundGeometry(options: SafeGroundOptions): THREE.Buffe
     const u = (x - width / 2) / (width / 2);
     const v = (z - depth / 2) / (depth / 2);
     const height = safeDomeHeight(u, v, moundHeight);
-    position.setY(i, height);
+    position.setY(i, flat ? 0 : height);
 
     // The beach, measured as a constant inset from the plot's own edge
     // (`rectInset`) rather than from the dome's height. Scenery-craft round:

@@ -91,7 +91,10 @@ export function flatRoofGeometry(): THREE.BufferGeometry {
   };
   // Lit: the parapet's four walls and the deck; dark: the slab's edge.
   const parapet = [...box(-o, o, deck, top, -o, -i), ...box(-o, o, deck, top, i, o), ...box(-o, -i, deck, top, -i, i), ...box(i, o, deck, top, -i, i)];
-  const deckTris = [[[-i, deck, -i], [-i, deck, i], [i, deck, i]], [[-i, deck, -i], [i, deck, i], [i, deck, -i]]];
+  // A hair above the slab's own top face: at exactly `deck` the two were
+  // coplanar and the deck flickered in stripes.
+  const deckY = deck + 0.02;
+  const deckTris = [[[-i, deckY, -i], [-i, deckY, i], [i, deckY, i]], [[-i, deckY, -i], [i, deckY, i], [i, deckY, -i]]];
   const slab = box(-o, o, base, deck, -o, o);
   // The deck is a shade lighter than the roof colour: sunk behind the
   // parapet it otherwise reads as a dark hole.

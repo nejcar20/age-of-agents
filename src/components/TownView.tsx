@@ -9,7 +9,6 @@ import { DistrictPanel, type SelectedDistrictInfo } from "./DistrictPanel";
 import { VillagerPanel } from "./VillagerPanel";
 import { buildingWallGeometry, flatRoofGeometry, gabledRoofGeometry, hippedRoofGeometry, pyramidRoofGeometry } from "./bevelGeometry";
 import { buildSafeGroundGeometry } from "./terrainGeometry";
-import { safeDomeHeight } from "../terrain";
 import { OpenWater, SUN_OFFSET, TownShallows } from "./Water";
 import { useDisposableMemo } from "./useDisposableMemo";
 import { buildAttentionHaloGeometry } from "./attentionHalo";
@@ -308,6 +307,9 @@ export const WALL_COLOR = "#c1704a";
  * what gives the island a coastline (a visible cliff edge) instead of being
  * an infinite flat sheet the water merely tints. */
 export const GROUND_THICKNESS = 0.5;
+/** How far below y=0 the cliff slab's top stops — under the coast mesh's
+ * interior (-0.03), never coplanar with the ground. */
+const CLIFF_TOP_GAP = 0.05;
 /** Warm off-white/cream — every building's WALL colour now, regardless of
  * `BuildingKind`. This is the single inversion that does most of the work of
  * reading as Townscaper rather than a spreadsheet: kind is still fully
@@ -1763,8 +1765,11 @@ function boxCorners(box: THREE.Box3): THREE.Vector3[] {
 // (design inputs §3: "no filler trees in empty plots, no invented harbour").
 // ---------------------------------------------------------------------
 
-/** How high the town's own ground mound rises at its centre, and how far it
- * dips (never below 0 — see `safeDomeHeight`) toward its edges. Kept small
+/** How high the town's ground would rise at its centre. It only SHADES the
+ * grass now — the surface itself is flat (`flat: true` below), because
+ * everything on it stands on y=0 — so it reads as a gentle rise without
+ * burying paths or sinking buildings. Originally: how far it dips (never
+ * below 0 — see `safeDomeHeight`) toward its edges. Kept small
  * and constant, well under the smallest real building's own height
  * (`buildingWorldHeight`'s `HEIGHT_BASE_FRAC * gridPitch`, at minimum
  * `0.85 * gridPitch`): art-direction round's own constraint, "terrain
@@ -1820,7 +1825,9 @@ function TownVegetationImpl({ layout, model }: { layout: CityLayout; model: City
       }),
     [layout],
   );
-  const heightAt = useMemo(() => (u: number, v: number) => safeDomeHeight(u, v, TOWN_MOUND_HEIGHT), []);
+  // The town's ground is flat (see `buildSafeGroundGeometry`'s `flat`), so
+  // trees stand at y=0 like everything else on it.
+  const heightAt = useMemo(() => () => 0, []);
   // The coast's meadow gets trees and rocks too — the same scatter, masked
   // to the band of grass between the town's edge and the beach.
   const { margin, spanX, spanZ } = useMemo(() => coastExtent(w, d), [w, d]);
@@ -1885,6 +1892,7 @@ function GroundImpl({ layout }: { layout: CityLayout }) {
         shadeColor: GRASS_SHADE_COLOR,
         lightColor: GRASS_LIGHT_COLOR,
         beachAtEdge: false,
+        flat: true,
       }),
     [w, d],
   );
@@ -1916,9 +1924,8 @@ function GroundImpl({ layout }: { layout: CityLayout }) {
 
   return (
     <group>
-      {/* The domed top — height 0 (at/past the edge) to `TOWN_MOUND_HEIGHT`
-          (at the centre), sitting ABOVE y=0 so it never sinks the ground
-          below the level every building's own base assumes. */}
+      {/* The town's ground: flat at y=0, the level every building, road and
+          plot stands on, shaded as if domed by `TOWN_MOUND_HEIGHT`. */}
       <mesh geometry={groundGeometry} receiveShadow castShadow>
         <meshStandardMaterial vertexColors roughness={1} />
       </mesh>
@@ -1932,8 +1939,11 @@ function GroundImpl({ layout }: { layout: CityLayout }) {
       {/* Scenery-craft round: the cliff is the ROCK under the turf, not more
           grass painted vertically — an identically-coloured side face is
           what made the town read as a rug rather than a piece of land. */}
-      <mesh position={[w / 2, -GROUND_THICKNESS / 2, d / 2]}>
-        <boxGeometry args={[w, GROUND_THICKNESS, d]} />
+      {/* Its top stops just under the coast's own interior surface (-0.03):
+          at exactly y=0 it was coplanar with the ground and flickered
+          through it in brown patches. */}
+      <mesh position={[w / 2, -(GROUND_THICKNESS + CLIFF_TOP_GAP) / 2, d / 2]}>
+        <boxGeometry args={[w, GROUND_THICKNESS - CLIFF_TOP_GAP, d]} />
         <meshStandardMaterial color={CLIFF_COLOR} roughness={1} />
       </mesh>
       {/* The open sea, then the town's own shallows laid over it — see

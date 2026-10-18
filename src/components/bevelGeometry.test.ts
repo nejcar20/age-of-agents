@@ -146,7 +146,7 @@ describe("flatRoofGeometry", () => {
     const insideOf = (c: THREE.Vector3) => {
       const t = triangle++;
       if (t < 40) return centres[Math.floor(t / 10)];
-      if (t < 42) return new THREE.Vector3(c.x, 0, c.z);
+      if (t < 42) return new THREE.Vector3(c.x, 0, c.z); // the deck, judged from below
       return new THREE.Vector3(0, -0.2, 0);
     };
     expect(geometry.attributes.position.count / 3).toBe(52);
