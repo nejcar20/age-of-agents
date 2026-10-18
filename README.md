@@ -182,5 +182,5 @@ npx vite --config vite.townshot.config.ts
 ---
 
 <div align="center">
-<sub>Built by <a href="https://github.com/nejcar20">nejcar20</a> and Luka, for fun. MIT licensed.</sub>
+<sub>Built by <a href="https://github.com/nejcar20">nejcar20</a> and <a href="https://github.com/lukazlatecan">lukazlatecan</a>, for fun. MIT licensed.</sub>
 </div>
