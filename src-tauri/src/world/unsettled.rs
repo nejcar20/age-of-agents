@@ -289,8 +289,19 @@ pub fn discovery_plan(
     settled_roots: &[String],
 ) -> Vec<PathBuf> {
     match &config.project_roots {
-        Some(configured) => configured.iter().map(PathBuf::from).collect(),
+        Some(configured) => configured.iter().map(|root| expand_home(root, home)).collect(),
         None => candidate_roots(home, settled_roots, &|path| path.is_dir()),
+    }
+}
+
+/// `~` and `~/…` in a hand-written config mean the home directory, the way
+/// a shell reads them; without this, `"~/work"` was a relative path to a
+/// folder literally named `~` and found nothing.
+fn expand_home(root: &str, home: &Path) -> PathBuf {
+    match root.strip_prefix('~') {
+        Some("") => home.to_path_buf(),
+        Some(rest) if rest.starts_with('/') => home.join(&rest[1..]),
+        _ => PathBuf::from(root),
     }
 }
 
@@ -301,6 +312,18 @@ mod tests {
 
     fn paths(list: &[&str]) -> Vec<PathBuf> {
         list.iter().map(PathBuf::from).collect()
+    }
+
+    #[test]
+    fn configured_roots_expand_a_leading_tilde_like_a_shell() {
+        let config = crate::config::Config {
+            project_roots: Some(vec!["~/work".into(), "~".into(), "/abs/code".into(), "~other/x".into()]),
+            ..Default::default()
+        };
+        assert_eq!(
+            discovery_plan(&config, Path::new("/Users/you"), &[]),
+            paths(&["/Users/you/work", "/Users/you", "/abs/code", "~other/x"]),
+        );
     }
 
     fn run_git(cwd: &Path, args: &[&str]) {
