@@ -116,7 +116,18 @@
 .workbench__primary { background: var(--wb-accent); color: #122e32; border: 0; border-radius: 6px; font-weight: 600 !important; padding: 10px 16px; white-space: nowrap; }
 .project-launcher { max-width: 280px; }
 .project-launcher > p { font-size: 11px; }
-.workbench__atlas { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.workbench__atlas { position: relative; flex: 1; min-height: 0; overflow: hidden; container-type: inline-size; container-name: atlas; }
+/* The map's HUD sizes itself to the window, but here the map is the window
+   minus the sidebar: measure the map instead. Narrow, the title plaque sits
+   beside the "Needs you" scroll rather than under it; with no room for both,
+   the sidebar already names the app and the scroll counts the agents. */
+@container atlas (max-width: 1240px) {
+  .workbench__atlas .chart-banner { left: 342px; transform: none; padding: 10px 26px 12px; }
+  .workbench__atlas .chart-banner h1 { font-size: 22px; }
+}
+@container atlas (max-width: 900px) {
+  .workbench__atlas .chart-banner { display: none; }
+}
 .workbench__atlas .app--sea, .workbench__atlas .town { position: absolute; }
 .workbench__atlas .app__header h1 { display: none; }
 .workbench__atlas .sea-hud { padding: 16px; }
@@ -221,8 +232,10 @@
 @media (prefers-reduced-motion: reduce) { .herdr-setup__spinner { animation: none; border-top-color: var(--wb-line); } }
 
 /* How to read the map, until dismissed. */
-.world-legend { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 18px; padding: 9px 12px 9px 18px; max-width: calc(100% - 32px); flex-wrap: wrap; justify-content: center;
-  background: rgba(16, 31, 43, .86); backdrop-filter: blur(8px); border: 1px solid var(--wb-line); border-radius: 999px; color: var(--wb-muted); font-size: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+/* Bottom-left, a small card: the bottom-right belongs to "Found a new island". */
+.world-legend { position: absolute; left: 22px; bottom: 26px; z-index: 5; display: grid; gap: 5px; padding: 12px 34px 12px 14px;
+  background: rgba(16, 31, 43, .88); backdrop-filter: blur(8px); border: 1px solid var(--wb-line); border-radius: 12px; color: var(--wb-muted); font-size: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.world-legend button { position: absolute; top: 6px; right: 6px; }
 .world-legend b { color: var(--wb-text); font-weight: 600; }
 .world-legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .world-legend button { background: none; border: 0; color: var(--wb-muted); font-size: 16px; line-height: 1; padding: 0 4px; }
