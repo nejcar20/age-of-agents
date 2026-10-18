@@ -1,0 +1,1217 @@
+/* Game-feel round (direct author feedback: "the ui is not that good... a
+   dark, square-cornered IDE-grey panel sits over a bright pastel toy world
+   in a completely different visual language"). Every colour below is drawn
+   from — or tuned to sit comfortably beside — the 3D scene's OWN palette
+   (`TownView.tsx`'s exported `SKY_COLOR`/`WALL_BASE_COLOR`/`PLOT_FILL`/etc.),
+   not invented separately: warm cream/sand surfaces, generous rounding, soft
+   warm-tinted shadows, so the UI reads as part of the same toy world instead
+   of a developer tool bolted on top of it.
+
+   The ONE deliberate exception is the terminal (`.terminal*`,
+   `.agent-actions__text`) — see its own comment below for why staying dark
+   and monospace is the right call there specifically. */
+:root {
+  color-scheme: light;
+  --sky: #d8f0ee;          /* == TownView's SKY_COLOR */
+  --sand: #fdf7ea;         /* panel surface — a hair lighter than WALL_BASE_COLOR for contrast against it */
+  --sand-soft: #f5ecd6;    /* == TownView's WALL_BASE_COLOR — secondary surfaces */
+  --sand-deep: #ecdcae;    /* close to TownView's PLOT_FILL — recessed/nested surfaces */
+  --sand-border: #e2cca3;
+  --ink: #4a3826;          /* primary warm-dark text */
+  --ink-soft: #8a7250;     /* secondary/muted text */
+  --ink-faint: #b6a37c;
+  --gold: #e3a63e;         /* primary action colour */
+  --gold-strong: #cf8f2a;
+  --gold-ink: #3a2410;
+  --blue: #4b93e0;         /* focus rings and links */
+  --amber: #e0a44b;        /* warnings and live badges */
+  --working: #f5992b;      /* "working" status — Herdr's orange, = ATTENTION_COLOR.working */
+  --stopped: #22c993;      /* "stopped" status — Herdr's green, = ATTENTION_COLOR.stopped */
+  --grey: #8f97a3;         /* "unknown" status */
+  --quiet: #8fd6bd;        /* finished and seen — Herdr's hollow ring, = ATTENTION_COLOR.quiet */
+  --shadow-lg: 0 12px 32px rgba(110, 82, 42, 0.22);
+  --shadow-md: 0 6px 18px rgba(110, 82, 42, 0.18);
+  --shadow-sm: 0 2px 8px rgba(110, 82, 42, 0.14);
+  --radius-lg: 22px;
+  --radius-md: 16px;
+  --radius-sm: 11px;
+
+  /* Art-direction round, item 8: "competent but characterless... give it a
+     real type scale." A genuine modular scale (~1.22 ratio), not a handful
+     of one-off `font-size`s picked per element — every text size in the UI
+     now traces back to one of these seven steps, so two labels at the same
+     conceptual level of importance actually share a size instead of
+     coincidentally being 12px and 13px. */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-display: 30px;
+
+  /* Craft pass, item 4: "the typography is system-UI... a game has a
+     voice." `ui-rounded` (WebKit's own rounded SYSTEM font variant) was
+     tried first and correctly judged as still part of the problem — it is
+     the platform's own default dressed up, not a real typeface with its
+     own character, and it silently disappears outside WebKit. `Fredoka`
+     (self-hosted via `@fontsource-variable/fredoka`, imported once in
+     `App.tsx`/`townshot.tsx` — see those imports' own doc comments for why
+     bundling rather than a Google Fonts `<link>`) is a real display face
+     with a genuinely playful, rounded, toy-like voice that reads as "game
+     title" rather than "system dialog" at a glance, used ONLY for
+     headings/titles/labels (`Age of Agents`, the town title, panel names,
+     HUD meta labels) — the same restraint the terminal's own dark/mono
+     exception already established: one deliberate accent, not a wholesale
+     re-skin. Body copy and data stay on the plain, highly legible system
+     sans below — a game's voice belongs on its title, not on a file path
+     or a line count someone needs to actually read quickly. */
+  --font-display: "Fredoka Variable", ui-rounded, "SF Pro Rounded", var(--font-body);
+  --font-body: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  /* Meta/label text (a HUD's own small-caps callouts — "SORT", "STATUS",
+     section headers inside panels) — tracked and capitalised via
+     `.label-meta` below, never plain lowercase prose at the same size as
+     everything else. */
+
+  /* The terminal's own palette — deliberately NOT part of the warm system
+     above. See `.terminal` for why. */
+  --term-bg: #14181f;
+  --term-bg-soft: #1c2129;
+  --term-text: #d8dee6;
+  --term-border: #323b48;
+}
+
+/* A small, reusable "HUD label" treatment — uppercase, tracked, muted —
+   for the short meta words scattered through the chrome ("Sort", "Status",
+   panel section headers) that used to be plain inline text indistinguishable
+   from prose. Applied via class, not a blanket selector, since not every
+   short label wants this (button text does not). */
+.label-meta {
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-faint);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Craft pass, item 3: a native `<select>`'s own OS chrome (a flat grey box,
+   the platform's own arrow glyph, a blue system focus ring) is one of the
+   loudest "this is a web page, not a game" tells in the whole frame — the
+   author's own direct complaint singled it out. `appearance: none` strips
+   that chrome from EVERY `<select>` in the app (sort, the sea's state
+   filter, both "kind" pickers) so each one instead takes its background/
+   border/radius from whichever HUD surface already wraps it
+   (`.app__sort select`, `.sea-search__state`, `.sheet__field select`,
+   further down this file) and shares ONE hand-drawn chevron plus ONE
+   custom focus ring, defined once here — every dropdown in the app now
+   reads as the same made control, not three different OS widgets glued
+   into a toy-town HUD.
+
+   Honest limitation, not a silent gap: the native OPEN popup list itself
+   is the one piece CSS cannot restyle without replacing `<select>`
+   outright with a hand-rolled listbox. That was tried and deliberately
+   dropped this round — every existing test across `App.test.tsx`,
+   `SeaSearchBar.test.tsx`, `IslandPanel.test.tsx` and
+   `NewProjectPanel.test.tsx` drives these controls via a plain
+   `fireEvent.change`, and a real listbox needs its own keyboard/focus-trap
+   behaviour tested from scratch — a real cost for restyling a popup that
+   is only ever on screen for the second a user has it open, not the tell
+   that is actually visible through ordinary play (the CLOSED control,
+   fixed below). */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%234a3826' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 9px 6px;
+  padding-right: 26px !important;
+}
+select::-ms-expand { display: none; }
+/* One shared focus treatment, replacing every platform's own system-blue
+   ring — the same gold accent the rest of the HUD already uses for
+   "this is active/selected" (`SELECTION_COLOR`'s own UI analogue). */
+select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+/* The same audit, applied to the other native control the HUD still uses
+   (`.sheet__checkbox`'s "start an agent"/"resume" toggles): a default OS
+   checkbox renders in whatever blue/grey the platform picks, unrelated to
+   this app's own palette. `accent-color` is a real CSS property (not a
+   replacement control) that recolours a native checkbox/radio's own check
+   mark and fill — the lowest-risk possible fix, since the element stays a
+   genuine `<input type="checkbox">` and every existing test that clicks or
+   reads its `checked` state is untouched. */
+input[type="checkbox"] {
+  accent-color: var(--gold);
+  width: 15px;
+  height: 15px;
+}
+input[type="text"]:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+body {
+  margin: 0; font: var(--text-md)/1.55 var(--font-body);
+  background: var(--sky); color: var(--ink);
+}
+.app { padding: 20px; }
+.app__header { display: flex; align-items: center; gap: 14px; }
+/* Item 8: was 17px/700 — barely bigger than the buttons sitting right next
+   to it, so "Age of Agents" read as one more UI label rather than the
+   game's own title. `--text-xl` + the display font gives it real
+   presence — this is the one line in the whole HUD that should look like a
+   logotype, not a heading. */
+.app__header h1 {
+  font: 700 var(--text-xl) var(--font-display); margin: 0; color: var(--ink);
+  letter-spacing: 0.01em;
+}
+/* The sort control: a small `<select>`, not a settings page — pushed to the
+   right of the title but left of the herdr status. */
+.app__sort { margin-left: auto; font-size: 12px; color: var(--ink-soft); display: flex; align-items: center; gap: 6px; }
+.app__sort select {
+  /* `background-color`, never the `background` SHORTHAND — a shorthand
+     resets every sub-property it doesn't mention, including the base
+     `select` rule's own custom chevron `background-image` above, which is
+     exactly the bug a first pass at this had (the chevron silently
+     vanished the moment any contextual rule set a background colour). */
+  background-color: var(--sand-soft); color: var(--ink); font: inherit; font-size: 12px;
+  border: 1px solid var(--sand-border); border-radius: var(--radius-sm); padding: 4px 8px; cursor: pointer;
+}
+.status { font-size: 12px; color: var(--ink-soft); }
+.status--off { color: var(--amber); }
+.warning { color: var(--amber); font-size: 12px; }
+.islands { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.island {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  border-radius: var(--radius-md); background: var(--sand); border-left: 4px solid transparent;
+  box-shadow: var(--shadow-sm);
+}
+.island--stopped { border-left-color: var(--stopped); background: #d8f5ea; }
+.island--working { border-left-color: var(--working); }
+/* Unknown: visible enough that it cannot be read as "nothing to do", quiet
+   enough that it never competes with the ❗ of a stopped agent. */
+.island--unknown { border-left-color: var(--grey); }
+.island--unknown .island__marker { opacity: .6; }
+.island__name { font-weight: 700; }
+/* The relative "last changed" date — always rendered (even "no known date",
+   honestly, rather than omitted) so the row's layout doesn't jump between
+   islands that do and don't know their own age. */
+.island__changed { opacity: .6; font-size: 12px; }
+.island__agents { margin-left: auto; opacity: .6; font-size: 12px; }
+/* Per-agent markers for a multi-agent island: the island's own ❗ only says
+   "something in here is stopped", not which pane — showing each agent's own
+   marker is what actually answers that. */
+.island__agent-markers { margin-left: auto; display: flex; gap: 6px; }
+.island__agent-marker { opacity: .55; }
+.island__agent-marker--stopped { opacity: 1; }
+.island__agent-marker--unknown { opacity: .6; }
+.empty { opacity: .65; }
+/* One calm line reporting what the jump hotkey did. No animation: nothing
+   on the attention path is allowed to move (principle 2). */
+.jump-note { font-size: 12px; color: var(--ink-soft); margin: 0 0 12px; }
+
+/* The unsettled list and its confirm sheet. */
+.unsettled { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--sand-border); }
+.unsettled h2 { font-size: 14px; font-weight: 700; margin: 0 0 6px; color: var(--ink); }
+.unsettled__header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.unsettled__header h2 { margin: 0 0 6px; }
+.unsettled__rescan {
+  background: var(--sand); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
+  font-size: 12px; padding: 5px 12px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.unsettled__rescan:hover { background: var(--sand-soft); }
+/* Names what the rows below actually do (start an agent) and the extra
+   step they take (create the workspace first) — see `UnsettledList`'s own
+   comment. Full `--ink`, unlike the `--ink-soft` scan metadata under it:
+   this is the instruction, not a footnote about it. */
+.unsettled__lede { font-size: 12px; color: var(--ink); margin: 0 0 3px; }
+.unsettled__roots { font-size: 12px; color: var(--ink-soft); margin: 0 0 12px; }
+.unsettled__outcome { font-size: 12px; color: var(--ink-soft); margin: 0 0 12px; }
+/* A failed scan, said as a failure — never dressed as an empty result
+   (principle 4). */
+.unsettled__error { color: var(--gold-strong); font-size: 12px; margin: 0 0 12px; }
+.unsettled__list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px; }
+.unsettled__row {
+  display: flex; align-items: baseline; gap: 10px; width: 100%;
+  padding: 10px 12px; border-radius: var(--radius-sm); border: none;
+  background: var(--sand); color: var(--ink); font: inherit; text-align: left; cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+.unsettled__row:hover { background: var(--sand-soft); }
+.unsettled__name { font-weight: 700; }
+.unsettled__path { opacity: .6; font-size: 12px; }
+.unsettled__browse {
+  background: var(--sand); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
+  padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.unsettled__browse:hover { background: var(--sand-soft); }
+
+.sheet {
+  position: fixed; inset: 0; background: rgba(74, 56, 38, 0.35);
+  display: flex; align-items: center; justify-content: center; z-index: 10;
+}
+.sheet__panel {
+  background: var(--sand); border: 1px solid var(--sand-border); border-radius: var(--radius-lg);
+  padding: 22px; width: min(480px, 90vw); box-shadow: var(--shadow-lg); color: var(--ink);
+}
+.sheet__panel h3 { margin: 0 0 12px; font: 700 var(--text-lg) var(--font-display); }
+/* The plain-words disclosure above the exact-calls block on the new-
+   workspace sheet (`FoundingSheet`): this repo has no workspace, so one is
+   created before the agent starts. Sits at full `--ink` and normal body
+   size — it is the sentence that has to actually be read, not the
+   `--ink-soft` supporting hint `.sheet__hint` renders. */
+.sheet__lede { font-size: 13px; line-height: 1.5; color: var(--ink); margin: 0 0 12px; }
+.sheet__calls {
+  background: var(--sand-deep); border-radius: var(--radius-sm); padding: 12px; margin: 0 0 14px;
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+/* The honest-failure line, rendered ON the sheet: a status line anywhere
+   else in `.unsettled` sits underneath this `position: fixed` overlay and
+   would be invisible while the sheet is open. */
+.sheet__error { color: var(--gold-strong); font-size: 12px; margin: 0 0 14px; }
+.sheet__checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 16px; }
+.sheet__actions { display: flex; justify-content: flex-end; gap: 10px; }
+.sheet__actions button {
+  background: var(--sand-soft); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
+  padding: 9px 16px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.sheet__actions button:last-child { background: var(--gold); border-color: var(--gold); color: var(--gold-ink); font-weight: 700; }
+.sheet__actions button:last-child:hover { background: var(--gold-strong); }
+.sheet__actions button:disabled { opacity: .55; cursor: default; }
+
+/* Islands are keyboard/click-openable rows, not inert <li>s — a focus ring
+   and a pointer cursor say "this does something". */
+.island { cursor: pointer; }
+.island:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* The town view REPLACES the archipelago entirely (spec §5.4, one attention
+   state at a time) rather than overlaying it, so it's positioned to cover
+   the whole window on its own rather than living inside `.app`'s padded,
+   document-flow layout. */
+.town { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--sky); }
+.town__header {
+  display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+  background: var(--sand); border-bottom: 1px solid var(--sand-border); box-shadow: var(--shadow-sm);
+}
+.town__back {
+  background: var(--sand-soft); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
+  padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.town__back:hover { background: var(--sand-deep); }
+.town__title { font: 700 var(--text-lg) var(--font-display); margin: 0; color: var(--ink); }
+.town__stats { font-size: 12px; color: var(--ink-soft); margin-left: auto; }
+/* Town-terminal round: the town header's own actions — "Open terminal ⤢"
+   and "Start agent…". Same shape and same weights as `.island-panel__actions`
+   one screen over (a gold primary, a sand secondary), because they ARE the
+   same two actions; a town should not look like a different product from
+   the sea. Sized down to 12px to sit on a single header line next to the
+   title. */
+.town__action {
+  background: var(--sand-soft); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
+  font-size: 12px; padding: 7px 13px; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap;
+}
+.town__action:hover { background: var(--sand-deep); }
+.town__action:disabled { opacity: .55; cursor: default; }
+.town__action--primary { background: var(--gold); border-color: var(--gold); color: var(--gold-ink); font-weight: 700; }
+.town__action--primary:hover { background: var(--gold-strong); }
+.town__action--primary:disabled:hover { background: var(--gold); }
+/* The selected villager's own working surface, hosted inside the town's
+   villager panel (`AgentActions`, the same component an expanded island row
+   shows at sea). The 24px left margin it carries at sea is the accordion
+   indent under an agent row; there is no accordion here, so it would just
+   be a stray inset. */
+.building-panel .agent-actions { margin-left: 0; margin-right: 0; }
+/* Town-villagers round: the town's own analogue of the sea's `.jump-note` —
+   a quiet, transient report of a villager-click focus attempt, sitting in
+   the header row itself (never a second layout row) so it never shifts
+   `.town__stage` below it. */
+.town__note { font-size: 12px; color: var(--ink-soft); }
+.town__stage { position: relative; flex: 1; min-height: 0; }
+/* A loading/error state is said in the same place the city itself would
+   render — never an empty scene, which would be a silent claim the repo has
+   no code (principle 4). */
+.town__status { padding: 20px; color: var(--ink-soft); font-size: 13px; }
+.town__status--error { color: var(--gold-strong); opacity: 1; }
+
+/* The archipelago — the primary screen. `.app--sea` gives up `.app`'s
+   padded document-flow layout for a full-bleed `position: fixed` stage, the
+   same reasoning `.town` already uses one level down, so the 3D canvas can
+   own the whole window. */
+.app--sea { padding: 0; position: fixed; inset: 0; }
+/* An overlay HUD, not a page header: floats over the canvas rather than
+   pushing it down, so the sea is visible edge-to-edge underneath it. */
+.sea-hud {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+  padding: 16px 20px 0; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center;
+}
+.sea-hud > * { pointer-events: auto; }
+.sea-hud .app__header {
+  align-self: stretch;
+  background: rgba(253, 247, 234, 0.92); backdrop-filter: blur(8px);
+  padding: 10px 18px; border-radius: var(--radius-md); width: fit-content;
+  box-shadow: var(--shadow-md); border: 1px solid rgba(226, 204, 163, 0.7);
+}
+.sea-hud .warning, .sea-hud .jump-note, .sea-hud .empty {
+  background: rgba(253, 247, 234, 0.92); backdrop-filter: blur(8px);
+  display: inline-block; padding: 6px 14px; border-radius: var(--radius-sm); margin: 8px 0 0;
+  box-shadow: var(--shadow-sm);
+}
+/* A toggle for an existing affordance, not a new feature of its own. */
+.sea-hud__toggle {
+  margin-left: 8px; background: var(--sand-soft); border: 1px solid var(--sand-border);
+  color: var(--ink); font: inherit; font-size: var(--text-sm); padding: 6px 13px 6px 8px;
+  border-radius: var(--radius-sm); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.sea-hud__toggle:hover { background: var(--sand-deep); }
+/* Item 8: a small round icon badge, the same "icon in its own circle, label
+   beside it" shape a game HUD's action bar uses — not just a character
+   floating inline with the text, which reads as decoration rather than an
+   actual icon. */
+.hud-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 999px; flex: none;
+  background: rgba(74, 56, 38, 0.09); font-size: 12px; line-height: 1;
+}
+.hud-icon--accent { background: var(--gold); color: var(--gold-ink); font-weight: 700; }
+/* The old plain-list screen, unmodified, in a slide-out drawer — "nothing
+   that works today may become unreachable" is a standing constraint, just no
+   longer the default thing on screen. */
+.sea-hud__panel {
+  position: absolute; top: 64px; right: 20px;
+  width: min(380px, calc(100vw - 40px)); max-height: calc(100vh - 100px);
+  overflow-y: auto; background: rgba(253, 247, 234, 0.97);
+  border: 1px solid var(--sand-border); border-radius: var(--radius-lg); padding: 18px;
+  backdrop-filter: blur(10px); box-shadow: var(--shadow-lg); color: var(--ink);
+}
+.sea-stage { position: absolute; inset: 0; }
+/* A loading/error state said in the same place the sea itself would render
+   — never a silently empty canvas, which principle 4 would read as "you
+   have no repositories". */
+.sea-stage__status {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  max-width: min(480px, calc(100vw - 40px)); text-align: center;
+  padding: 18px 22px; color: var(--ink-soft); font-size: 13px;
+  background: rgba(253, 247, 234, 0.92); border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+}
+.sea-stage__status--error { color: var(--gold-strong); opacity: 1; }
+.sea-stage__status--error .town__back { margin-top: 10px; }
+
+/* "Who needs me" (game-feel round) — the persistent, unmissable indicator of
+   how many agents are stopped and waiting, and a second door into the same
+   jump Space already triggers. Centred at the very top of the HUD, above
+   the title bar, so it is the first thing the eye lands on — deliberately
+   NOT tucked into the header row alongside the sort control and buttons,
+   which is exactly "a marker you have to go looking for". */
+.who-needs-me {
+  margin: 0 0 10px; padding: 8px 20px; border-radius: 999px; border: none; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600;
+  background: rgba(253, 247, 234, 0.92); color: var(--ink-soft); box-shadow: var(--shadow-sm);
+  display: flex; align-items: center; gap: 8px;
+}
+.who-needs-me--active {
+  background: var(--stopped); color: var(--gold-ink); box-shadow: var(--shadow-md);
+  animation: who-needs-me-pulse 1.8s ease-in-out infinite;
+}
+.who-needs-me__mark { font-size: 15px; }
+.who-needs-me__text--calm { font-weight: 500; opacity: .8; }
+@keyframes who-needs-me-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(34, 201, 147, 0.55), var(--shadow-md); }
+  50% { transform: scale(1.035); box-shadow: 0 0 0 10px rgba(34, 201, 147, 0), var(--shadow-md); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .who-needs-me--active { animation: none; }
+}
+
+/* Search-and-filter round: the "who needs me" badge's own row, with the
+   search/state-filter bar right beside it — the brief's own instruction
+   that the state filter belongs "hung off" that exact badge. Wraps at
+   narrow widths (the app's real 1100×720 default already has both side by
+   side; a much narrower window stacks them rather than overflowing). */
+.sea-hud__top-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center;
+  margin: 0 0 10px;
+}
+.sea-hud__top-row .who-needs-me { margin: 0; }
+.sea-search {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: rgba(253, 247, 234, 0.92); backdrop-filter: blur(8px);
+  padding: 7px 14px; border-radius: 999px; box-shadow: var(--shadow-sm);
+  font-size: 12px;
+}
+.sea-search__input {
+  background: var(--sand-soft); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
+  font-size: 12px; padding: 5px 10px; border-radius: var(--radius-sm); width: 150px;
+}
+.sea-search__input:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.sea-search__state {
+  /* `background-color`, not the shorthand — see `.app__sort select`'s own
+     comment for why: a shorthand here would silently erase the base
+     `select` rule's custom chevron `background-image`. */
+  background-color: var(--sand-soft); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
+  font-size: 12px; padding: 5px 8px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.sea-search__count { color: var(--ink-soft); white-space: nowrap; }
+
+/* The sea's own "reset view" (mirrors `TownView`'s, one level up — see
+   `Archipelago.tsx`'s `resetView`). Top-right, clear of the HUD (top-left/
+   top-center) and the island panel (bottom-left). */
+.sea-reset-view {
+  position: absolute; top: 16px; right: 16px; z-index: 2;
+  background: rgba(253, 247, 234, 0.92); color: var(--ink); border: 1px solid var(--sand-border);
+  border-radius: var(--radius-sm); padding: 6px 13px; font: 12px inherit; cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+.sea-reset-view:hover { background: var(--sand-soft); }
+.sea-mood {
+  position: absolute; top: 16px; right: 136px; z-index: 2;
+  background: rgba(253, 247, 234, 0.92); color: var(--ink); border: 1px solid var(--sand-border);
+  border-radius: var(--radius-sm); padding: 6px 13px; font: 12px inherit; cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+.sea-mood:hover { background: var(--sand-soft); }
+
+/* Villager idle bob (game-feel round: "make the islands feel alive at
+   rest"). A CSS animation, not a `useFrame` — costs nothing extra to render
+   and works whether or not anything else is invalidating a frame. Small
+   amplitude on purpose: it must never compete with the stopped-island
+   beacon/ignition-pulse for the eye — that hierarchy (beacon first, villager
+   idling a distant second) is the product, not an accident. */
+.villager-marker { animation: villager-bob 2.6s ease-in-out infinite; }
+@keyframes villager-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+/* A town villager's badge: Herdr's status dot and the task it reports.
+   Dark on purpose — it floats over bright grass and roofs, and has to read
+   over all of them. */
+.town-agent-badge {
+  display: flex; align-items: center; gap: 6px; max-width: 240px;
+  padding: 3px 9px 3px 6px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(16, 31, 43, 0.84); color: #e8f1f3; box-shadow: 0 2px 6px rgba(10, 16, 20, 0.35);
+  font: 500 11px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  white-space: nowrap; cursor: pointer; transform: translateY(-8px);
+}
+.town-agent-badge:hover { background: rgba(28, 50, 65, 0.92); }
+.town-agent-badge--stopped { border-color: var(--stopped); }
+.town-agent-badge > span { overflow: hidden; text-overflow: ellipsis; }
+.agent-status-dot { flex: 0 0 10px; width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box; }
+.agent-status-dot--working { background: var(--working); animation: status-breathe 1.6s ease-in-out infinite; }
+.agent-status-dot--stopped { background: var(--stopped); }
+.agent-status-dot--quiet { border: 2px solid var(--quiet); }
+.agent-status-dot--unknown { background: var(--grey); opacity: 0.7; }
+@keyframes status-breathe { 50% { box-shadow: 0 0 0 3px rgba(245, 153, 43, 0.3); } }
+
+/* A working villager wears a slowly turning orange arc, the way Herdr's
+   working dot is the one that moves. Drawn on ::after so the bob keeps the
+   element's own transform. */
+.villager-marker--working { position: relative; }
+.villager-marker--working::after {
+  content: ""; position: absolute; inset: -6px; border-radius: 50%;
+  border: 2px solid transparent; border-top-color: var(--working); border-right-color: var(--working);
+  animation: villager-spin 1.4s linear infinite; pointer-events: none;
+}
+@keyframes villager-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .villager-marker { animation: none; }
+  .villager-marker--working::after { animation: none; }
+  .agent-status-dot--working { animation: none; }
+}
+
+/* The selected-building panel: a persistent card, not a tooltip — it stays
+   until Escape/close/a click on empty ground. `position: fixed` (relative to
+   the VIEWPORT, not a nested stage element) — deliberate hardening after a
+   real bug: an `absolute`-positioned panel depends on every ancestor in its
+   containing-block chain being sized exactly as expected, and the author's
+   own screenshot showed one clipped/overflowing in the live app in a way
+   this file's own screenshot harness (which only ever rendered these panels
+   in isolation) never caught. `fixed` removes that dependency entirely — its
+   position/size answer to the window alone. */
+.building-panel {
+  position: fixed; left: 16px; bottom: 16px; z-index: 5;
+  width: min(320px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto;
+  background: var(--sand); border: 1px solid var(--sand-border); border-radius: var(--radius-lg);
+  padding: 16px 18px; color: var(--ink); font-size: 13px; box-shadow: var(--shadow-lg);
+}
+.building-panel__close {
+  position: absolute; top: 10px; right: 12px;
+  background: none; border: none; color: var(--ink-soft); font-size: 18px; line-height: 1;
+  cursor: pointer; padding: 2px 4px;
+}
+.building-panel__close:hover { color: var(--ink); }
+.building-panel__name {
+  margin: 0 20px 10px 0; font: 700 var(--text-lg) var(--font-display);
+  overflow-wrap: anywhere; color: var(--ink);
+}
+.building-panel__facts {
+  display: grid; grid-template-columns: auto 1fr; gap: 5px 10px;
+  margin: 0 0 12px; font-size: var(--text-sm);
+}
+.building-panel__facts dt {
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-faint);
+}
+.building-panel__facts dd { margin: 0; overflow-wrap: anywhere; }
+.building-panel__path { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.building-panel__buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.building-panel__open {
+  background: var(--gold); color: var(--gold-ink); border: none; font: inherit; font-weight: 700;
+  padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.building-panel__open:hover { background: var(--gold-strong); }
+/* Reveal is a secondary action next to "Open file". */
+.building-panel__reveal {
+  background: var(--sand-soft); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
+  padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.building-panel__reveal:hover { background: var(--sand-deep); }
+.building-panel__error { color: var(--gold-strong); font-size: 12px; margin: 10px 0 0; }
+
+/* The archipelago's island action panel — same card language as
+   `.building-panel`, anchored to the same corner of the WINDOW (not the
+   sea's own stage element — see `.building-panel`'s comment on why `fixed`
+   matters here), never both at once in practice since a town and the sea
+   are mutually exclusive views. */
+.island-panel {
+  position: fixed; left: 16px; bottom: 16px; z-index: 5;
+  width: min(340px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto;
+  background: var(--sand); border: 1px solid var(--sand-border); border-radius: var(--radius-lg);
+  padding: 16px 18px; color: var(--ink); font-size: 13px; box-shadow: var(--shadow-lg);
+}
+.island-panel__close {
+  position: absolute; top: 10px; right: 12px;
+  background: none; border: none; color: var(--ink-soft); font-size: 18px; line-height: 1;
+  cursor: pointer; padding: 2px 4px;
+}
+.island-panel__close:hover { color: var(--ink); }
+.island-panel__name {
+  margin: 0 20px 4px 0; font: 700 var(--text-lg) var(--font-display);
+  overflow-wrap: anywhere; color: var(--ink);
+}
+.island-panel__path {
+  margin: 0 0 10px; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink-soft); overflow-wrap: anywhere;
+}
+.island-panel__facts {
+  display: grid; grid-template-columns: auto 1fr; gap: 5px 10px;
+  margin: 0 0 10px; font-size: var(--text-sm);
+}
+.island-panel__facts dt {
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-faint);
+}
+.island-panel__facts dd { margin: 0; overflow-wrap: anywhere; }
+/* Opus review (ITEM 1): a `measured_at` reading old enough that uncommitted
+   work is a live possibility (see `measuredAt.ts`) gets `--amber` — the same
+   "worth a second look" tone `--amber`/`ATTENTION_COLOR.stopped` already
+   carry elsewhere, never `--gold-strong` (that's reserved for an actual
+   failure, e.g. `.island-panel__error`/`.sea-stage__status--error`) — a
+   noticeably-old measurement is a disclosed fact, not an error, and must not
+   read as one. */
+.island-panel__measured--old { color: var(--amber); font-weight: 600; }
+.island-panel__measured-caveat { font-weight: 400; }
+.island-panel__agents { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; font-size: 12px; }
+/* Each agent is a full-width button: clicking it expands its own prompt
+   box/output, the same "row toggles a section below it" language a
+   disclosure control uses — never a second floating panel. */
+.island-panel__agent-row {
+  display: flex; align-items: baseline; gap: 6px; width: 100%;
+  background: none; border: none; color: var(--ink); font: inherit; font-size: 12px;
+  padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer; text-align: left;
+}
+.island-panel__agent-row:hover { background: var(--sand-soft); }
+.island-panel__agent-marker { opacity: .6; }
+.island-panel__agent-marker--stopped { opacity: 1; }
+.island-panel__agent-title { overflow-wrap: anywhere; }
+.island-panel__agent-status { margin-left: auto; color: var(--ink-soft); }
+.island-panel__error { color: var(--gold-strong); font-size: 12px; margin: 0 0 10px; }
+/* Item 1's waiting/"it started but we cannot show it yet" line. In the
+   metadata tone, NOT the error tone (`--gold-strong` above): the agent is
+   running in both states, and colouring that as a failure would be its own
+   small lie. */
+.island-panel__waiting { color: var(--ink-faint); font-size: 12px; margin: 0 0 10px; }
+.island-panel__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.island-panel__actions button {
+  background: var(--sand-soft); border: 1px solid var(--sand-border); color: var(--ink); font: inherit; font-size: 12px;
+  padding: 8px 13px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.island-panel__actions button:hover { background: var(--sand-deep); }
+.island-panel__actions button:first-child { background: var(--gold); border-color: var(--gold); color: var(--gold-ink); font-weight: 700; }
+.island-panel__actions button:first-child:hover { background: var(--gold-strong); }
+.island-panel__actions button:disabled { opacity: .55; cursor: default; }
+
+/* A labelled control row inside a `.sheet` (a kind picker, a name input, a
+   directory-chosen display). */
+.sheet__field {
+  display: flex; align-items: center; gap: 8px; font-size: 13px;
+  margin-bottom: 12px; flex-wrap: wrap;
+}
+.sheet__field select, .sheet__field input[type="text"] {
+  /* `background-color`, not the shorthand — see `.app__sort select`'s own
+     comment: a shorthand here would silently erase the base `select`
+     rule's custom chevron `background-image` on the kind picker. */
+  background-color: var(--sand-deep); color: var(--ink); font: inherit; font-size: 13px;
+  border: 1px solid var(--sand-border); border-radius: var(--radius-sm); padding: 6px 9px; flex: 1; min-width: 0;
+}
+.sheet__field button {
+  background: var(--sand-soft); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
+  padding: 7px 13px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.sheet__field button:hover { background: var(--sand-deep); }
+.sheet__field-value { font-size: 12px; color: var(--ink-soft); overflow-wrap: anywhere; }
+/* The honest "no resume available" line, shown in place of a toggle rather
+   than a toggle that would silently do nothing. */
+.sheet__hint { font-size: 12px; color: var(--ink-soft); margin: 0 0 12px; }
+
+/* An expanded agent's own actions — nested one level inside its
+   `.island-panel__agents` row, visually recessed (a slightly deeper sand
+   tone) so it reads as "belonging to" the row above it. Deliberately kept
+   COMPACT (a short preview, not the full transcript) now that `Terminal`
+   exists — "open bigger" is what the big view is for; this stays a glance. */
+.agent-actions { margin: 4px 0 10px 24px; padding: 10px 12px; background: var(--sand-deep); border-radius: var(--radius-sm); }
+.agent-actions__output-header {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; color: var(--ink-soft); margin-bottom: 6px; gap: 8px;
+}
+.agent-actions__output-header-buttons { display: flex; gap: 6px; }
+.agent-actions__output-header button {
+  background: var(--sand); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
+  font-size: 11px; padding: 3px 9px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.agent-actions__output-header button:hover { background: var(--sand-soft); }
+.agent-actions__open { font-weight: 600; }
+/* The ONE deliberate exception to this whole file's warm/sand palette (game-
+   feel round, the coordinator's own instruction): a snippet of a REAL
+   terminal's output should look like a terminal, not a cream card — the
+   contrast is the point, "the real thing showing through the game". Kept
+   compact here on purpose; `Terminal` (below) is the full-size, ANSI-
+   coloured, resizable version of this exact same text. */
+.agent-actions__text {
+  margin: 0; max-height: 80px; overflow-y: auto;
+  background: var(--term-bg); color: var(--term-text); border-radius: 8px; padding: 8px 10px;
+  font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.agent-actions__hint { font-size: 11px; color: var(--ink-soft); margin: 0; }
+.agent-actions__error { color: var(--gold-strong); font-size: 11px; margin: 0; }
+/* Phase 0.7: the "compose a reviewed prompt" box, formerly nested inside
+   `Terminal` (see that file's own doc comment for why it moved here — a
+   separate, always-visible control from the raw interactive terminal). */
+.agent-actions__compose { display: flex; gap: 8px; margin-top: 8px; }
+.agent-actions__prompt {
+  flex: 1; font: inherit; font-size: 12px; padding: 6px 9px; resize: vertical; min-height: 40px;
+  background: var(--sand); color: var(--ink); border: 1px solid var(--sand-border); border-radius: 8px;
+}
+.agent-actions__send {
+  background: var(--blue); color: #fff; border: none; font: 12px -apple-system, system-ui, sans-serif;
+  font-weight: 700; padding: 0 16px; border-radius: 8px; cursor: pointer;
+}
+.agent-actions__send:disabled { opacity: .5; cursor: default; }
+/* Sea/town consistency round: the explicit way OUT to the user's own
+   terminal window (`pane.focus`), at the foot of this agent's panel on both
+   screens — the placement the town's villager panel gave it, now shared
+   instead of mirrored. Deliberately SECONDARY (the same sand tone
+   `.building-panel__reveal` uses, not the gold/blue of a primary action):
+   leaving the app should never look like the thing you were meant to
+   click. */
+.agent-actions__external { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.agent-actions__raise {
+  background: var(--sand-soft); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
+  font-size: 11px; padding: 4px 10px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.agent-actions__raise:hover { background: var(--sand-deep); }
+/* The app's own "this transcript was cut short" affordance (security review,
+   MINOR 5) — rendered here, as its own element, specifically so it can never
+   be mistaken for something the agent itself printed into `.agent-actions__text`
+   below it. */
+.agent-actions__truncated {
+  font-size: 11px; color: var(--gold-ink); background: var(--amber);
+  border-radius: 6px; padding: 3px 8px; margin: 0 0 6px; display: inline-block;
+}
+
+/* ---------------------------------------------------------------------
+   The big terminal (game-feel round, direct author feedback: "the terminal
+   should be able to open bigger... it is where the agent actually talks to
+   him"). Dark and monospace ON PURPOSE — the one deliberate exception to
+   every warm/rounded surface above: this is meant to look and feel like a
+   real terminal, not a toy-world card, because it is showing REAL terminal
+   output. `resize: both` on `.terminal__panel` makes it an actually
+   resizable window (not just a bigger fixed box); it opens near-fullscreen
+   by default so "bigger" is true before anyone drags a single pixel.
+   --------------------------------------------------------------------- */
+/* Xterm also uses `terminal` on its emulator root. Keep the popup layout
+   off that node without increasing specificity over embedded/fullscreen. */
+.terminal:where(:not(.xterm)) {
+  position: fixed; inset: 0; z-index: 20;
+  background: rgba(20, 24, 31, 0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+.terminal__panel {
+  width: min(1200px, 94vw); height: min(820px, 90vh);
+  min-width: 420px; min-height: 320px; max-width: 98vw; max-height: 98vh;
+  resize: both; overflow: hidden;
+  background: var(--term-bg); color: var(--term-text);
+  border: 1px solid var(--term-border); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column;
+  font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.terminal__header {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  background: var(--term-bg-soft); border-bottom: 1px solid var(--term-border);
+  font-family: -apple-system, system-ui, sans-serif;
+}
+.terminal__title { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+/* Phase 0.7: the attachment line — spec §5.6's own explicit requirement that
+   the surface always show which pane and which repository it is attached
+   to, so it can never be mistaken for a second, independent session. */
+.terminal__attachment {
+  font-size: 11px; opacity: .65; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.terminal__hint { font-size: 11px; opacity: .6; margin-left: 4px; }
+/* The one-glance focus indicator (spec §5.6: "the user can always see where
+   their keys are going") — deliberately loud (amber, not a quiet grey) when
+   live, since typing into an agent's real session while believing you're
+   typing into the game is the exact failure mode this exists to prevent. */
+.terminal__focus-badge {
+  margin-left: auto; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+  background: var(--term-bg-soft); border: 1px solid var(--term-border); color: var(--term-text); opacity: .75;
+  white-space: nowrap;
+}
+.terminal__focus-badge--live { background: var(--amber); color: var(--gold-ink); border-color: var(--amber); opacity: 1; }
+.terminal__close {
+  background: none; border: none; color: var(--term-text); opacity: .7; font-size: 18px; line-height: 1;
+  cursor: pointer; padding: 2px 4px;
+}
+/* ---------------------------------------------------------------------
+   THE TERMINAL SWITCHER (lag-and-switcher round). The author's main ask,
+   twice: switching between terminals has to be easy.
+
+   A TAB BAR in the terminal's own chrome, directly under the attachment
+   line — the only part of the app still visible while he is deep in a
+   conversation. It lists every running agent, not just the blocked ones,
+   because the thing being replaced is Cmd-tabbing between terminal tabs.
+
+   The colour language is the app's existing one and nothing new: amber for
+   stopped, blue for working, grey for unknown, quiet for idle — the same
+   three variables the sea's villagers and the island rows have used since
+   the first round. Only the STOPPED tabs are given a filled, loud
+   treatment; everything else is an outline, so a bar with six agents in it
+   still reads at a glance as "these two need you".
+
+   Deliberately quieter than `.terminal__focus-badge--live`, which says
+   where the keyboard is pointing and remains the most consequential chrome
+   in the app. Nothing beside it may compete at the same weight.
+   --------------------------------------------------------------------- */
+.terminal__tabs {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px;
+  /* Three rows of tabs before it scrolls — enough for a dozen agents
+     without the bar ever eating the terminal it sits above. */
+  padding: 7px 14px; max-height: 104px; overflow-y: auto;
+  background: var(--term-bg-soft); border-bottom: 1px solid var(--term-border);
+  font-family: -apple-system, system-ui, sans-serif;
+}
+.terminal__tabs-label {
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--term-text); opacity: .45;
+}
+.terminal__tabs-list { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.terminal__tab {
+  display: inline-flex; align-items: baseline; gap: 6px; cursor: pointer;
+  font-family: inherit; font-size: var(--text-sm);
+  padding: 3px 10px; border-radius: 999px;
+  background: transparent; color: var(--term-text);
+  border: 1px solid var(--term-border);
+}
+.terminal__tab:hover { border-color: var(--term-text); }
+/* A real focus ring: these are reachable by Tab from the header, and
+   pressing one re-points the keyboard at a different agent's live session. */
+.terminal__tab:focus-visible { outline: 2px solid var(--term-text); outline-offset: 2px; }
+/* The four states, in Herdr's colours (see ATTENTION_COLOR). */
+.terminal__tab--stopped {
+  border-color: var(--stopped); background: var(--stopped); color: var(--gold-ink); font-weight: 600;
+}
+.terminal__tab--stopped:hover { border-color: var(--stopped); filter: brightness(1.08); }
+.terminal__tab--working { border-color: var(--working); }
+.terminal__tab--unknown { border-color: var(--grey); }
+/* WHERE YOU ARE. A tab bar that hid the current tab would make you count to
+   work out your position, so it stays and is marked instead — and it is
+   `disabled`, because "switch to where you already are" would remount the
+   terminal and silently drop keyboard focus for nothing. */
+.terminal__tab--here {
+  cursor: default; background: var(--term-text); color: var(--term-bg);
+  border-color: var(--term-text); font-weight: 600; opacity: 1;
+  /* A ring OUTSIDE the pill, in the panel's own background then the text
+     colour, so "you are here" survives every attention fill — including
+     the amber one, where the tab is otherwise indistinguishable from the
+     other stopped tabs (a render caught exactly that). `box-shadow`, not
+     `outline`, so the real focus ring below still has somewhere to go. */
+  box-shadow: 0 0 0 2px var(--term-bg-soft), 0 0 0 3px var(--term-text);
+}
+.terminal__tab--here.terminal__tab--stopped { background: var(--stopped); border-color: var(--stopped); color: var(--gold-ink); }
+.terminal__tab-mark { font-size: 10px; }
+.terminal__tab-island { white-space: nowrap; }
+.terminal__tab-pane {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--text-xs); opacity: .7;
+}
+.terminal__tab--here .terminal__tab-pane { opacity: .6; }
+/* "needs you" in words, not only a glyph and a colour — the one state that
+   matters most must not depend on telling two small coloured dots apart. */
+.terminal__tab-needs { font-size: var(--text-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+/* Beside the label, NOT pushed right with `margin-left: auto`: a render
+   with eight agents showed the tabs wrapping to a second row and this hint
+   landing on a third, below the bar's own scroll cutoff, where it was
+   invisible. */
+.terminal__tabs-hint {
+  font-size: var(--text-xs); opacity: .45; white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+/* The switch key's honest "there is nowhere to go" — a sentence, for a few
+   seconds, never a permanent row that would contradict the bar above. */
+.terminal__tabs-note {
+  margin: 0; padding: 7px 14px; font-size: var(--text-xs); opacity: .6;
+  font-family: -apple-system, system-ui, sans-serif;
+  border-bottom: 1px solid var(--term-border);
+}
+/* The pane surface itself — the ONE focusable element in this dialog, and
+   the sole source of every keystroke this component ever sends (see
+   `Terminal.tsx`'s own doc comment on the focus boundary). The focus ring is
+   deliberately a strong, unmissable outline, not the browser's thin default
+   — this is the single most consequential piece of UI chrome in the app. */
+/* A flex COLUMN since Item 2: the zoomed grid (`.terminal__fit`) takes
+   whatever height the badges and the focus hint leave it, and the zoom is
+   computed against exactly that. `overflow: hidden` replaced `overflow-y:
+   auto` for the same reason — the grid is scaled to fit the space it is
+   given, so a scrollbar could only ever appear as a rounding artefact. */
+.terminal__surface {
+  position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 14px 16px;
+  outline: none; cursor: text;
+  display: flex; flex-direction: column;
+  /* TERMINAL-FEEL ROUND — stated rather than inherited. Selecting output
+     and copying it is the single biggest "this is a real terminal" thing
+     this surface does, it costs herdr nothing, and a `user-select: none`
+     added anywhere above it (three.js scenes attract exactly that rule)
+     would silently take it away again with no test able to see it. */
+  user-select: text; -webkit-user-select: text;
+}
+/* The selection has to be VISIBLE on a near-black terminal, and the
+   browser's default highlight on this background is a bruise. Amber is
+   this app's own "the user is doing something here" colour — the same one
+   the focus ring uses — at a weight that leaves the text readable. */
+.terminal__surface ::selection {
+  background: rgba(224, 164, 75, 0.38);
+  color: var(--term-text);
+}
+.terminal__surface--focused { box-shadow: inset 0 0 0 3px var(--amber); }
+/* Item 2 (terminal-polish round): the pane's own grid, ZOOMED to fill the
+   panel — same rows, same columns, same text, drawn larger. The author's
+   live pane is 23 rows by ~55 columns; the panel is ~1200x820, so a
+   faithful 1:1 mirror really did look like a stamp in a frame. See
+   `terminalScale.ts` for why this is a zoom and never a `pane.resize`
+   (which would rearrange his real session to suit our window, and is not
+   in this app's permitted write surface).
+
+   `__fit` is the measured box. `overflow: hidden` is safe BECAUSE the
+   scale is chosen never to exceed it — there is nothing to scroll to and
+   nothing to clip. Centred so the slack left over by the pane's own aspect
+   ratio sits evenly around the grid instead of stranding it in one
+   corner. */
+.terminal__fit {
+  flex: 1; min-height: 0; min-width: 0; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+/* Reserves the grid's DRAWN size (a CSS transform does not affect layout),
+   so the centering above is against the real thing. */
+.terminal__grid { position: relative; flex: none; }
+/* The grid at its TRUE layout size — `width: max-content` with
+   `white-space: pre` so the measurement is the pane's real column count,
+   never a re-wrapped approximation of it, and `position: absolute` so this
+   box's own size never feeds back into `__grid`'s. */
+.terminal__grid-inner { position: absolute; top: 0; left: 0; width: max-content; }
+/* THE SCROLLBACK VIEW (terminal-feel round). A plain scrolling box — the
+   browser scrolls it, not us — drawn at the same glyph size the live grid
+   is zoomed to, so entering and leaving history does not resize the text
+   under whoever is reading it. Left-aligned rather than centred like the
+   live grid: history is a column of text to read down, not a screen to
+   frame. A real scrollbar is deliberately left visible; it is the honest
+   indicator of how much there is. */
+.terminal__scrollback {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: auto;
+  line-height: 1.6;
+}
+/* The paused-mirror bar. Amber-edged, because "this is not live" is a
+   fact about the most consequential surface in the app, but an outline
+   rather than a fill so it never competes with the focus badge. */
+.terminal__scrollback-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 7px 14px; font-size: 11px;
+  font-family: -apple-system, system-ui, sans-serif;
+  background: var(--term-bg-soft); color: var(--term-text);
+  border-bottom: 1px solid var(--amber);
+}
+.terminal__scrollback-mark { color: var(--amber); font-size: 12px; }
+.terminal__scrollback-truncated { color: var(--amber); font-weight: 600; }
+.terminal__scrollback-live {
+  margin-left: auto; cursor: pointer;
+  font-family: inherit; font-size: 11px; font-weight: 600;
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--amber); color: var(--gold-ink); border: 1px solid var(--amber);
+}
+.terminal__scrollback-live:hover { filter: brightness(1.08); }
+.terminal__scrollback-live:focus-visible { outline: 2px solid var(--term-text); outline-offset: 2px; }
+/* `pre`, not `pre-wrap`: herdr has already wrapped this text to the pane's
+   real width, and re-wrapping it here would show the user a layout their
+   own terminal is not showing — the exact thing that stops this being a
+   mirror. Anything wider than the panel is handled by scaling down, not by
+   reflowing. */
+.terminal__text { margin: 0; white-space: pre; }
+/* One quiet line, not a banner: clicks cannot reach the pane, because
+   herdr's pane input is keystrokes only. See `Terminal.tsx`'s doc comment. */
+.terminal__note {
+  margin: 0; padding: 7px 14px; font-size: 11px; opacity: .55;
+  font-family: -apple-system, system-ui, sans-serif;
+  border-top: 1px solid var(--term-border); background: var(--term-bg-soft);
+}
+.terminal__error {
+  color: #f0958e; font-size: 12px; font-family: -apple-system, system-ui, sans-serif;
+  padding: 0 16px; margin: 0 0 8px;
+}
+/* Same affordance as `.agent-actions__truncated`, sized for the big view —
+   the app's own words, never spliced into the transcript below it. */
+.terminal__truncated {
+  color: var(--gold-ink); background: var(--amber); font-family: -apple-system, system-ui, sans-serif;
+  font-size: 11px; border-radius: 6px; padding: 3px 10px; margin: 0 0 8px; display: inline-block;
+  /* The surface is a flex column since Item 2; without this the badge
+     would stretch the full width instead of hugging its own text. */
+  align-self: flex-start;
+}
+.terminal__hint--overlay {
+  position: sticky; bottom: 0; margin: 10px 0 0; padding: 8px 10px; border-radius: 8px;
+  background: var(--term-bg-soft); font-family: -apple-system, system-ui, sans-serif; opacity: .75;
+}
+
+/* Recording mode (⇧R, see recording.tsx): the scene takes the whole window
+   and everything layered over it — panels, tooltips, buttons — leaves the
+   shot. The canvas wrapper is always the stage's first child, and it is
+   where in-scene markers (villager dots, badges, +N labels) live. */
+:root[data-recording] .scene-stage {
+  position: fixed !important; inset: 0 !important; width: auto !important; height: auto !important;
+  z-index: 2147483000;
+}
+:root[data-recording] .scene-stage > :not(:first-child) { display: none !important; }
+.recording-badge {
+  position: fixed; top: 16px; right: 16px; z-index: 2147483001; pointer-events: none;
+  padding: 6px 12px; border-radius: 999px; background: rgba(16, 20, 26, 0.8); color: #ff5a5a;
+  font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.recording-badge small { color: #c9d3da; font-weight: 400; margin-left: 6px; }
+
+/* "+42" over a building an agent just edited (TownView's GrowthLabels):
+   rises a little and fades, like a damage number, then is gone. */
+.growth-label {
+  display: inline-block; padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+  background: rgba(16, 31, 43, 0.86); border: 1px solid rgba(255, 255, 255, 0.14);
+  font: 700 12px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+  animation: growth-rise 3.2s ease-out forwards;
+}
+.growth-label--up { color: #9ff0b4; }
+.growth-label--down { color: #ff9d8f; }
+@keyframes growth-rise {
+  0% { opacity: 0; transform: translateY(6px) scale(0.9); }
+  12% { opacity: 1; transform: translateY(0) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-18px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .growth-label { animation: none; }
+}
+
+/* ---------------------------------------------------------------------
+   The chart (ChartHud): the world view's interface in the cartographer
+   direction — parchment pieces with brass edges, laid at the sea's edges
+   like the furniture of a map table. Every piece casts a hard "base"
+   shadow plus a soft one, so it reads as a physical object on the world.
+   --------------------------------------------------------------------- */
+:root {
+  --chart-paper: #f4e6c6;
+  --chart-paper-light: #fbf3df;
+  --chart-edge: #c79a4e;
+  --chart-base: #b98a3f;
+  --chart-ink-soft: #6f5838;
+  --chart-seal: #1a9670;
+  --chart-drop: 0 14px 26px rgba(40, 24, 8, 0.38);
+  /* The chart's own ink, gold and lettering. Never the shared --ink/--gold/
+     --font-display: the dark workspace shell redefines those for its own
+     theme, which turned every label on the parchment near-white. */
+  --chart-ink: #4a3826;
+  --chart-gold: #e3a63e;
+  --chart-gold-ink: #3a2410;
+  --chart-display: "Fredoka Variable", ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
+}
+.chart-hud { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.chart-hud > * { pointer-events: auto; }
+
+.chart-banner {
+  position: absolute; left: 50%; top: 18px; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 12px 54px 14px; background: var(--chart-paper); color: var(--chart-ink);
+  border: 2px solid var(--chart-edge); border-radius: 6px 6px 22px 22px;
+  box-shadow: 0 6px 0 var(--chart-base), var(--chart-drop);
+}
+.chart-banner h1 { margin: 0; font: 700 28px/1 var(--chart-display); letter-spacing: 0.01em; color: var(--chart-ink); }
+.chart-banner p {
+  margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--chart-ink-soft); font-variant-numeric: tabular-nums;
+}
+/* An island's name on the sea: a small parchment tag pinned above it,
+   brass-edged for islands whose agents need you. */
+.chart-tag {
+  transform: translateY(-100%); white-space: nowrap; padding: 3px 10px 4px;
+  background: var(--chart-paper); color: var(--chart-ink); border: 1.5px solid #d9bd83; border-radius: 8px;
+  font: 600 12px var(--chart-display); box-shadow: 0 3px 0 rgba(185, 138, 63, 0.6), 0 6px 12px rgba(40, 24, 8, 0.28);
+}
+.chart-tag[data-attention="stopped"] { border-color: var(--chart-seal); box-shadow: 0 3px 0 var(--chart-seal), 0 6px 12px rgba(40, 24, 8, 0.3); }
+.chart-tag__mark { margin-left: 2px; }
+
+.needs-scroll {
+  position: absolute; left: 22px; top: 22px; width: 300px; box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 10px; padding: 16px;
+  background: var(--chart-paper); color: var(--chart-ink);
+  border: 2px solid var(--chart-edge); border-radius: 14px;
+  box-shadow: 0 6px 0 var(--chart-base), var(--chart-drop);
+}
+.needs-scroll__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.needs-scroll__head h2 { margin: 0; font: 600 19px var(--chart-display); }
+.needs-scroll__seal {
+  min-width: 32px; height: 32px; padding: 0 8px; border-radius: 16px; border: none;
+  background: #9c8a6b; color: #fff; font: 700 15px var(--chart-display); cursor: default;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2);
+}
+.needs-scroll__seal--active { background: var(--chart-seal); cursor: pointer; animation: seal-pulse 2.2s ease-in-out infinite; }
+.needs-scroll__seal--active:hover { filter: brightness(1.08); }
+@keyframes seal-pulse { 50% { box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2), 0 0 0 6px rgba(26, 150, 112, 0.18); } }
+.needs-scroll__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.needs-scroll__list button {
+  width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 9px 12px; border-radius: 10px; border: 1.5px solid #d9bd83; background: var(--chart-paper-light);
+  color: var(--chart-ink); text-align: left; font: inherit; cursor: pointer;
+}
+.needs-scroll__list button:hover { border-color: var(--chart-edge); background: #fffaf0; }
+.needs-scroll__list button:focus-visible { outline: 2px solid var(--chart-seal); outline-offset: 2px; }
+.needs-scroll__task { font-size: 14px; font-weight: 700; line-height: 1.3; }
+.needs-scroll__where { font-size: 12px; color: var(--chart-ink-soft); }
+.needs-scroll__more { margin: 0; font-size: 12px; color: var(--chart-ink-soft); }
+.needs-scroll__foot { display: flex; gap: 14px; font-size: 12px; font-weight: 700; color: var(--chart-ink-soft); }
+.needs-scroll__foot span { display: inline-flex; align-items: center; gap: 6px; }
+.needs-scroll__dot { width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box; display: inline-block; }
+.needs-scroll__dot--working { background: var(--working); }
+.needs-scroll__dot--idle { border: 2px solid var(--stopped); }
+
+.chart-column { position: absolute; right: 22px; display: flex; flex-direction: column; gap: 12px; z-index: 3; }
+.chart-column--hud { top: 22px; }
+/* The scene's own buttons continue the same column below the HUD's four. */
+.chart-column--scene { top: 294px; }
+.chart-round {
+  position: relative; width: 54px; height: 54px; border-radius: 50%;
+  border: 2px solid var(--chart-edge); background: var(--chart-paper); color: var(--chart-ink);
+  box-shadow: 0 5px 0 var(--chart-base), 0 10px 18px rgba(40, 24, 8, 0.32);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.chart-round:hover { transform: translateY(-1px); }
+.chart-round:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--chart-base), 0 6px 12px rgba(40, 24, 8, 0.3); }
+.chart-round:focus-visible { outline: 3px solid var(--chart-seal); outline-offset: 3px; }
+.chart-round[aria-pressed="true"], .chart-round--accent { background: #f7d58e; }
+.chart-round__count {
+  position: absolute; right: -4px; top: -4px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box;
+  border-radius: 10px; background: var(--chart-ink); color: var(--chart-paper); font: 700 11px/20px var(--chart-display);
+}
+
+.chart-slip {
+  position: absolute; right: 92px; top: 22px; padding: 10px 12px;
+  background: var(--chart-paper); border: 2px solid var(--chart-edge); border-radius: 14px;
+  box-shadow: 0 5px 0 var(--chart-base), var(--chart-drop);
+}
+.chart-slip .sea-search { background: transparent; box-shadow: none; padding: 0; backdrop-filter: none; }
+
+.chart-found {
+  position: absolute; right: 22px; bottom: 26px; height: 56px; padding: 0 24px;
+  display: flex; align-items: center; gap: 10px; border-radius: 16px;
+  border: 2px solid #9c6a1e; background: var(--chart-gold); color: var(--chart-gold-ink);
+  font: 600 18px var(--chart-display); cursor: pointer;
+  box-shadow: 0 6px 0 #9c6a1e, 0 14px 24px rgba(40, 24, 8, 0.4);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.chart-found:hover { transform: translateY(-1px); }
+.chart-found:active { transform: translateY(4px); box-shadow: 0 2px 0 #9c6a1e, 0 8px 14px rgba(40, 24, 8, 0.35); }
+.chart-found:focus-visible { outline: 3px solid var(--chart-seal); outline-offset: 3px; }
+
+/* The old HUD row now only carries notes and the island list, under the
+   banner; the list opens beside the round-button column. */
+.app--sea .sea-hud { padding-top: 112px; }
+.app--sea .sea-hud__panel { top: 22px; right: 92px; }
+.app--sea .sea-hud__panel .app__sort { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .needs-scroll__seal--active { animation: none; }
+  .chart-round, .chart-found { transition: none; }
+}
+@media (max-width: 760px) {
+  .chart-banner { top: auto; bottom: 96px; padding: 10px 28px 12px; }
+  .needs-scroll { width: calc(100vw - 108px); }
+}
+
+/* The town's header in the chart's materials, so moving from the sea into a
+   town feels like opening a map, not switching to another app. */
+.town__header {
+  position: relative; z-index: 3;
+  background: var(--chart-paper); border-bottom: 2px solid var(--chart-edge);
+  box-shadow: 0 4px 0 var(--chart-base), 0 10px 22px rgba(40, 24, 8, 0.3);
+}
+.town__back {
+  color: var(--chart-ink);
+  border-radius: 999px; border: 2px solid var(--chart-edge); background: var(--chart-paper-light);
+  font: 600 14px var(--chart-display); padding: 6px 14px; box-shadow: 0 3px 0 var(--chart-base);
+}
+.town__back:hover { background: #fffaf0; }
+.town__back:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--chart-base); }
+.town__title { font: 700 24px var(--chart-display); color: var(--chart-ink); }
+.town__stats { color: var(--chart-ink-soft); font-weight: 600; letter-spacing: 0.02em; }
+/* A small parchment chip for the town's on-map buttons. */
+.chart-chip {
+  border: 2px solid var(--chart-edge); border-radius: 999px; background: var(--chart-paper); color: var(--chart-ink);
+  font: 600 13px var(--chart-display); padding: 5px 13px; cursor: pointer;
+  box-shadow: 0 3px 0 var(--chart-base), 0 6px 12px rgba(40, 24, 8, 0.28);
+}
+.chart-chip:hover { background: #fffaf0; }
+.chart-chip:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--chart-base); }
+.chart-chip:focus-visible { outline: 3px solid var(--chart-seal); outline-offset: 2px; }
+.town-reset-view { position: absolute; top: 12px; right: 12px; z-index: 1; }
+
+/* Controls that sit ON the parchment take the chart's own colours, never
+   the shared ones the dark workspace shell redefines. */
+.town__header .town__action {
+  background: var(--chart-paper-light); border: 2px solid var(--chart-edge); color: var(--chart-ink);
+  font: 600 14px var(--chart-display); border-radius: 999px; box-shadow: 0 3px 0 var(--chart-base);
+}
+.town__header .town__action:hover { background: #fffaf0; }
+.town__header .town__action--primary { background: var(--chart-gold); border-color: #9c6a1e; color: var(--chart-gold-ink); box-shadow: 0 3px 0 #9c6a1e; }
+.town__header .town__action--primary:hover { background: #eab452; }
+.town__header .town__action--primary:disabled:hover { background: var(--chart-gold); }
+.town__header .town__stats { color: var(--chart-ink-soft); }
+.chart-slip .sea-search { color: var(--chart-ink); }
+.chart-slip .sea-search__input,
+.chart-slip .sea-search__state { background-color: var(--chart-paper-light); border: 1.5px solid #d9bd83; color: var(--chart-ink); }
+.chart-slip .sea-search__input::placeholder { color: var(--chart-ink-soft); }
+.chart-slip .sea-search__count { color: var(--chart-ink-soft); }
+/* The workspace shell styles every <button>; these keep the chart's own
+   lettering on its buttons. */
+.chart-hud .chart-found { font: 600 18px var(--chart-display); }
+.chart-hud .needs-scroll__seal { font: 700 15px var(--chart-display); }
+.chart-hud .needs-scroll__list button { font-family: inherit; }

@@ -1,0 +1,57 @@
+[package]
+name = "age-of-agents"
+version = "0.1.0"
+description = "A city-builder where the cities are your git repositories and the villagers are your AI coding agents."
+authors = ["nejcar20"]
+license = "MIT"
+repository = "https://github.com/nejcar20/age-of-agents"
+edition = "2021"
+# The crate ships three binaries: the app itself plus the `city_preview` and
+# `city_fixture` development tools. Without this, a bare `cargo run` — which is
+# exactly what `npm run tauri dev` issues — cannot choose between them and
+# fails with "could not determine which binary to run". Adding those tools
+# broke `tauri dev` and nothing caught it, because every check ran the test
+# suite or the screenshot harness and none of them ever launched the app.
+default-run = "age-of-agents"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "tauri_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time"] }
+anyhow = "1"
+dirs = "5"
+libc = "0.2"
+chrono = "0.4"
+tauri-plugin-dialog = "2.7.3"
+# Terminal-feel round: ⌘V in the embedded terminal. Rust-side only — see
+# `commands::clipboard_read_text` for why the web Clipboard API was not
+# reliable enough inside a WKWebView, and why this is not granted to the
+# frontend in `capabilities/default.json`.
+tauri-plugin-clipboard-manager = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

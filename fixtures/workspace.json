@@ -1,0 +1,267 @@
+{
+  "_note": "Synthetic, read-only browser preview. Not real repositories or agent activity.",
+  "archipelago": [
+    {
+      "root": "/demo/projects/AgeOfAgents",
+      "name": "AgeOfAgents",
+      "plot": {
+        "x": 0,
+        "z": 0,
+        "w": 17,
+        "d": 16
+      },
+      "city": {
+        "status": "known",
+        "district_count": 5,
+        "building_count": 32,
+        "width": 12,
+        "depth": 12,
+        "source": "Git",
+        "measured_at": 1790000000
+      },
+      "last_changed_at": 1790000000
+    },
+    {
+      "root": "/demo/projects/harbor-api",
+      "name": "harbor-api",
+      "plot": {
+        "x": 24,
+        "z": 0,
+        "w": 17,
+        "d": 16
+      },
+      "city": {
+        "status": "known",
+        "district_count": 6,
+        "building_count": 43,
+        "width": 12,
+        "depth": 12,
+        "source": "Git",
+        "measured_at": 1790000000
+      },
+      "last_changed_at": 1789980000
+    },
+    {
+      "root": "/demo/projects/fieldnotes",
+      "name": "fieldnotes",
+      "plot": {
+        "x": 48,
+        "z": 0,
+        "w": 17,
+        "d": 16
+      },
+      "city": {
+        "status": "known",
+        "district_count": 7,
+        "building_count": 54,
+        "width": 12,
+        "depth": 12,
+        "source": "Git",
+        "measured_at": 1790000000
+      },
+      "last_changed_at": 1789960000
+    },
+    {
+      "root": "/demo/projects/design-system",
+      "name": "design-system",
+      "plot": {
+        "x": 0,
+        "z": 22,
+        "w": 17,
+        "d": 16
+      },
+      "city": {
+        "status": "known",
+        "district_count": 8,
+        "building_count": 65,
+        "width": 12,
+        "depth": 12,
+        "source": "Git",
+        "measured_at": 1790000000
+      },
+      "last_changed_at": 1789940000
+    },
+    {
+      "root": "/demo/projects/weekend-builds",
+      "name": "weekend-builds",
+      "plot": {
+        "x": 24,
+        "z": 22,
+        "w": 17,
+        "d": 16
+      },
+      "city": {
+        "status": "known",
+        "district_count": 9,
+        "building_count": 76,
+        "width": 12,
+        "depth": 12,
+        "source": "Git",
+        "measured_at": 1790000000
+      },
+      "last_changed_at": 1789920000
+    },
+    {
+      "root": "/demo/projects/paper-trail",
+      "name": "paper-trail",
+      "plot": {
+        "x": 48,
+        "z": 22,
+        "w": 17,
+        "d": 16
+      },
+      "city": {
+        "status": "known",
+        "district_count": 10,
+        "building_count": 87,
+        "width": 12,
+        "depth": 12,
+        "source": "Git",
+        "measured_at": 1790000000
+      },
+      "last_changed_at": 1789900000
+    },
+    {
+      "root": "/demo/projects/tiny-tools",
+      "name": "tiny-tools",
+      "plot": {
+        "x": 0,
+        "z": 44,
+        "w": 17,
+        "d": 16
+      },
+      "city": {
+        "status": "known",
+        "district_count": 11,
+        "building_count": 98,
+        "width": 12,
+        "depth": 12,
+        "source": "Git",
+        "measured_at": 1790000000
+      },
+      "last_changed_at": 1789880000
+    },
+    {
+      "root": "/demo/projects/studio-site",
+      "name": "studio-site",
+      "plot": {
+        "x": 24,
+        "z": 44,
+        "w": 17,
+        "d": 16
+      },
+      "city": {
+        "status": "known",
+        "district_count": 12,
+        "building_count": 109,
+        "width": 12,
+        "depth": 12,
+        "source": "Git",
+        "measured_at": 1790000000
+      },
+      "last_changed_at": 1789860000
+    }
+  ],
+  "world": {
+    "islands": [
+      {
+        "id": "w1",
+        "name": "AgeOfAgents",
+        "root": "/demo/projects/AgeOfAgents",
+        "attention": "stopped",
+        "agents": [
+          {
+            "pane_id": "w1:p1",
+            "workspace_id": "w1",
+            "title": "Review the workspace redesign",
+            "kind": "codex",
+            "status": "idle",
+            "attention": "stopped",
+            "cwd": "/demo/projects/AgeOfAgents",
+            "is_worktree": false
+          }
+        ],
+        "last_changed_at": 1790000000
+      },
+      {
+        "id": "w2",
+        "name": "harbor-api",
+        "root": "/demo/projects/harbor-api",
+        "attention": "working",
+        "agents": [
+          {
+            "pane_id": "w2:p1",
+            "workspace_id": "w2",
+            "title": "Add streaming responses",
+            "kind": "claude",
+            "status": "working",
+            "attention": "working",
+            "cwd": "/demo/projects/harbor-api",
+            "is_worktree": false
+          }
+        ],
+        "last_changed_at": 1789980000
+      },
+      {
+        "id": "w3",
+        "name": "fieldnotes",
+        "root": "/demo/projects/fieldnotes",
+        "attention": "stopped",
+        "agents": [
+          {
+            "pane_id": "w3:p1",
+            "workspace_id": "w3",
+            "title": "Waiting for API credentials",
+            "kind": "claude",
+            "status": "idle",
+            "attention": "stopped",
+            "cwd": "/demo/projects/fieldnotes",
+            "is_worktree": false
+          }
+        ],
+        "last_changed_at": 1789960000
+      },
+      {
+        "id": "w4",
+        "name": "design-system",
+        "root": "/demo/projects/design-system",
+        "attention": "working",
+        "agents": [
+          {
+            "pane_id": "w4:p1",
+            "workspace_id": "w4",
+            "title": "Clean up the component library",
+            "kind": "gemini",
+            "status": "working",
+            "attention": "working",
+            "cwd": "/demo/projects/design-system",
+            "is_worktree": false
+          }
+        ],
+        "last_changed_at": 1789940000
+      },
+      {
+        "id": "w5",
+        "name": "weekend-builds",
+        "root": "/demo/projects/weekend-builds",
+        "attention": "quiet",
+        "agents": [
+          {
+            "pane_id": "w5:p1",
+            "workspace_id": "w5",
+            "title": "Explore the prototype",
+            "kind": "codex",
+            "status": "idle",
+            "attention": "quiet",
+            "cwd": "/demo/projects/weekend-builds",
+            "is_worktree": false
+          }
+        ],
+        "last_changed_at": 1789920000
+      }
+    ],
+    "herdr_connected": true,
+    "herdr_version": "0.9.0",
+    "protocol_mismatch": false
+  }
+}
