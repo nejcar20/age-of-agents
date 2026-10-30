@@ -30,7 +30,7 @@ import { jumpMessage } from "./jump";
 import { formatLastChanged } from "./lastChanged";
 import { useArchipelago } from "./useArchipelago";
 import { useRaids } from "./useRaids";
-import type { RaidReport } from "./raids";
+import { pruneRescoutErrors, type RaidReport, type RescoutError } from "./raids";
 import { useHotkey } from "./useHotkey";
 import { useWindowFocused } from "./useWindowFocused";
 import { useWorld } from "./useWorld";
@@ -291,8 +291,14 @@ function AtlasAppInner({
   const scoutIsland = raids.scoutIsland;
   // And each island's last rescout failure, so the raid panel can show it:
   // `raids.error` only surfaces in the sea's HUD, which a town does not
-  // have. Cleared when that island is scouted again.
-  const [rescoutErrors, setRescoutErrors] = useState<ReadonlyMap<string, string>>(() => new Map());
+  // have. Cleared when that island is scouted again, and as soon as a newer
+  // report for it arrives (a later scout, or a scout-all, succeeded).
+  const [rescoutErrors, setRescoutErrors] = useState<ReadonlyMap<string, RescoutError>>(() => new Map());
+  const reportsRef = useRef(raids.reports);
+  useEffect(() => {
+    reportsRef.current = raids.reports;
+    setRescoutErrors((current) => pruneRescoutErrors(current, raids.reports));
+  }, [raids.reports]);
   const scoutOne = useCallback(
     (root: string) => {
       setRescouting((current) => new Set(current).add(root));
@@ -308,7 +314,11 @@ function AtlasAppInner({
           next.delete(root);
           return next;
         });
-        if (failure !== null) setRescoutErrors((current) => new Map(current).set(root, failure));
+        if (failure !== null) {
+          // Against the report held now: only one newer than it clears this.
+          const scannedAt = reportsRef.current.get(root)?.scanned_at ?? null;
+          setRescoutErrors((current) => new Map(current).set(root, { message: failure, scannedAt }));
+        }
       });
     },
     [scoutIsland],
@@ -340,7 +350,7 @@ function AtlasAppInner({
       onClose={() => setRaidRoot(null)}
       onScout={() => scoutOne(raidIsland.view.root)}
       scouting={scoutingRoots.has(raidIsland.view.root)}
-      scoutError={rescoutErrors.get(raidIsland.view.root) ?? null}
+      scoutError={rescoutErrors.get(raidIsland.view.root)?.message ?? null}
       targets={raidTargets}
       connected={world.herdr_connected}
       onOpenTerminal={openTerminalFromRaid}
@@ -579,6 +589,7 @@ function AtlasAppInner({
           scouting: raids.scouting,
           error: raids.error,
           onScoutAll: () => void raids.scoutAll(),
+          onOpen: raids.refreshScanners,
           disabled: seaHarnessProps?.scoutDisabled ?? false,
         }}
       />

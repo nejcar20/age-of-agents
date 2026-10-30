@@ -66,13 +66,16 @@ export function raidColor(severity: Severity, stale: boolean): string {
   return "#" + new Color(SEVERITY_COLOR[severity]).lerp(STALE_GREY, STALE_MIX).getHexString();
 }
 
-/** Worst first — the order ships are drawn and groups are ranked in. */
-const SEVERITY_RANK: Record<Severity, number> = {
+/** Worst first — the order ships are drawn, groups are ranked and the raid
+ * panel lists findings in. "unknown" ranks just after moderate, as it is
+ * drawn (see `SEVERITY_COLOR`), never below a known-low finding; the Rust
+ * `Severity` ordering agrees. */
+export const SEVERITY_RANK: Record<Severity, number> = {
   critical: 0,
   high: 1,
   moderate: 2,
-  low: 3,
-  unknown: 4,
+  unknown: 3,
+  low: 4,
 };
 
 export function findingsOf(report: RaidReport | undefined): Finding[] {
@@ -195,6 +198,42 @@ export function sunkFindings(before: RaidReport | undefined, after: RaidReport):
   if (after.stale || (after.status.kind !== "clean" && after.status.kind !== "raided")) return [];
   const still = new Set(findingsOf(after).map(findingKey));
   return findingsOf(before).filter((f) => !still.has(findingKey(f)));
+}
+
+/** What a newly shown `report` may sink ships against: the report it
+ * replaced (`previous`, from `useRaids`) or, failing that, the one this
+ * island was showing. `null` — sink nothing — unless the scan itself changed
+ * (`scanned_at`): a refetch that only recomputed `stale` re-scouted nothing,
+ * and must not replay an older rescout's sinking either. */
+export function sinkBaseline(
+  shown: RaidReport | undefined,
+  report: RaidReport | undefined,
+  previous: RaidReport | undefined,
+): RaidReport | null {
+  if (!report || !shown || shown === report || shown.scanned_at === report.scanned_at) return null;
+  return previous ?? shown;
+}
+
+/** One island's last failed rescout, and the `scanned_at` of the report it
+ * had when that failed (`null`: none). */
+export type RescoutError = { message: string; scannedAt: number | null };
+
+/** Drops each rescout failure that a newer report for its island has since
+ * superseded — a later scout succeeded, so the failure is no longer news.
+ * Returns `errors` itself when nothing was dropped. */
+export function pruneRescoutErrors(
+  errors: ReadonlyMap<string, RescoutError>,
+  reports: ReadonlyMap<string, RaidReport>,
+): ReadonlyMap<string, RescoutError> {
+  let next: Map<string, RescoutError> | null = null;
+  for (const [root, error] of errors) {
+    const report = reports.get(root);
+    if (report && (error.scannedAt === null || report.scanned_at > error.scannedAt)) {
+      next ??= new Map(errors);
+      next.delete(root);
+    }
+  }
+  return next ?? errors;
 }
 
 /** The island panel's one-line "Threats" fact: "3 raiders (1 critical)",

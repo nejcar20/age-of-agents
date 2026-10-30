@@ -43,6 +43,7 @@ function Probe() {
       <span data-testid="scouting">{api.scouting ? `${api.scouting.done}/${api.scouting.total}` : "none"}</span>
       <span data-testid="error">{api.error ?? ""}</span>
       <span data-testid="scanners">{api.scanners ? `${api.scanners.osv}` : "null"}</span>
+      <span data-testid="detail">{[...api.reports.values()].map((r) => `${r.root}@${r.scanned_at}${r.stale ? ":stale" : ""}`).join(",")}</span>
     </div>
   );
 }
@@ -122,5 +123,47 @@ describe("useRaids", () => {
     let result: string | null = "unset";
     await act(async () => { result = await api.scoutIsland("/p/a"); });
     expect(result).toBeNull();
+  });
+
+  // CRITICAL 1 (final review): `stale` is only computed by `raid_reports`,
+  // so a lockfile changed mid-session must reach the screen on refocus.
+  it("refetches on window focus so a report turns stale", async () => {
+    let list = [rep("/p/a", "clean", 5)];
+    setup({ raid_scanners: { osv: true, npm: true } });
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string) => (cmd === "raid_reports" ? Promise.resolve(list) : base(cmd)));
+    render(<Probe />);
+    await waitFor(() => expect(screen.getByTestId("detail").textContent).toBe("/p/a@5"));
+    list = [{ ...rep("/p/a", "clean", 5), stale: true }];
+    act(() => { window.dispatchEvent(new Event("focus")); });
+    await waitFor(() => expect(screen.getByTestId("detail").textContent).toBe("/p/a@5:stale"));
+    // A stale flip is not a replacement: nothing was re-scouted, so there is
+    // no `previous` to sink ships from.
+    expect(screen.getByTestId("prev").textContent).toBe("");
+  });
+
+  it("an older fetch never overwrites a newer event-delivered report", async () => {
+    let resolveFetch!: (list: RaidReport[]) => void;
+    setup({ raid_scanners: { osv: true, npm: true } });
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "raid_reports" ? new Promise<RaidReport[]>((r) => { resolveFetch = r; }) : base(cmd));
+    render(<Probe />);
+    await waitFor(() => expect(handlers["raid-report"]).toBeDefined());
+    act(() => handlers["raid-report"]({ payload: rep("/p/a", "raided", 9) }));
+    await act(async () => { resolveFetch([{ ...rep("/p/a", "clean", 3), stale: true }, rep("/p/b", "clean", 3)]); });
+    expect(screen.getByTestId("detail").textContent).toBe("/p/a@9,/p/b@3");
+  });
+
+  it("refreshScanners asks the backend again", async () => {
+    let scanners = { osv: false, npm: true };
+    setup({ raid_reports: [] });
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string) => (cmd === "raid_scanners" ? Promise.resolve(scanners) : base(cmd)));
+    render(<Probe />);
+    await waitFor(() => expect(screen.getByTestId("scanners").textContent).toBe("false"));
+    scanners = { osv: true, npm: true };
+    act(() => api.refreshScanners());
+    await waitFor(() => expect(screen.getByTestId("scanners").textContent).toBe("true"));
   });
 });

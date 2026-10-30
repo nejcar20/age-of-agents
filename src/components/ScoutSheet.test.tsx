@@ -27,6 +27,24 @@ describe("ScoutControl", () => {
     );
   });
 
+  it("a missing npm is only reported as not found, with no install command", () => {
+    render(<ScoutControl {...props({ scanners: { osv: true, npm: false } })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Scout for threats" }));
+    const sheet = screen.getByRole("dialog", { name: "Scout for threats" });
+    expect(sheet.textContent).toContain("npm — not found");
+    expect(sheet.textContent).not.toContain("brew install node");
+  });
+
+  it("asks which scanners exist again each time the sheet opens", () => {
+    const onOpen = vi.fn();
+    render(<ScoutControl {...props({ onOpen })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Scout for threats" }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Scout for threats" }));
+    expect(onOpen).toHaveBeenCalledTimes(2);
+  });
+
   it("scout_confirm_calls_scoutAll_once", () => {
     const onScoutAll = vi.fn();
     render(<ScoutControl {...props({ onScoutAll })} />);

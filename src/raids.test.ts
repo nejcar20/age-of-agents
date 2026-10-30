@@ -11,6 +11,9 @@ import {
   sunkFindings,
   threatsSummary,
   findingKey,
+  pruneRescoutErrors,
+  sinkBaseline,
+  SEVERITY_RANK,
   type Finding,
   type RaidReport,
   type Severity,
@@ -157,5 +160,47 @@ describe("raids", () => {
     expect(isSeaIslandMatch(sea("/ok"), "", "under_attack", raids)).toBe(false);
     expect(isSeaIslandMatch(sea("/none"), "", "under_attack", raids)).toBe(false);
     expect(findBestSeaIslandMatch([sea("/ok"), sea("/hit")], "h", "under_attack", raids)?.view.root).toBe("/hit");
+  });
+
+  it("unknown_ranks_with_moderate_above_low", () => {
+    // Spec: unknown is drawn like moderate, so it must never fall off the
+    // ship cap (or the bottom of a list) behind a known-low finding.
+    expect(SEVERITY_RANK.unknown).toBeGreaterThan(SEVERITY_RANK.moderate);
+    expect(SEVERITY_RANK.unknown).toBeLessThan(SEVERITY_RANK.low);
+    const r = raided(["low", "low", "low", "low", "low", "low", "unknown"].map((s, i) => finding(`F${i}`, s as Severity)));
+    expect(shipsFor(r).ships[0].severity).toBe("unknown");
+  });
+
+  it("sink_baseline_only_when_the_scan_itself_changed", () => {
+    const old = raided([finding("A", "high")], { scanned_at: 1 });
+    const shown = raided([finding("B", "high")], { scanned_at: 2 });
+    // A refetch that only flips `stale` (same scan) sinks nothing — not even
+    // against the older `previous` the last real rescout left behind.
+    expect(sinkBaseline(shown, { ...shown, stale: true }, old)).toBeNull();
+    expect(sinkBaseline({ ...shown, stale: true }, { ...shown }, old)).toBeNull();
+    // A new scan sinks against what it replaced.
+    const next = report({ kind: "clean" }, { scanned_at: 3 });
+    expect(sinkBaseline(shown, next, shown)).toBe(shown);
+    expect(sinkBaseline(shown, next, undefined)).toBe(shown);
+    // Nothing shown yet, or the very same report: nothing to sink.
+    expect(sinkBaseline(undefined, next, shown)).toBeNull();
+    expect(sinkBaseline(next, next, shown)).toBeNull();
+  });
+
+  it("rescout_errors_clear_when_a_newer_report_arrives", () => {
+    const errors = new Map([
+      ["/p/a", { message: "boom", scannedAt: 5 }],
+      ["/p/b", { message: "bang", scannedAt: null }],
+      ["/p/c", { message: "still", scannedAt: 5 }],
+    ]);
+    const reports = new Map([
+      ["/p/a", report({ kind: "clean" }, { root: "/p/a", scanned_at: 6 })],
+      ["/p/b", report({ kind: "clean" }, { root: "/p/b", scanned_at: 1 })],
+      ["/p/c", report({ kind: "clean" }, { root: "/p/c", scanned_at: 5, stale: true })],
+    ]);
+    const pruned = pruneRescoutErrors(errors, reports);
+    expect([...pruned.keys()]).toEqual(["/p/c"]);
+    // Nothing to clear: the same map back, so state does not churn.
+    expect(pruneRescoutErrors(pruned, reports)).toBe(pruned);
   });
 });

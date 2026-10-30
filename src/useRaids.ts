@@ -10,6 +10,15 @@ export type RaidScanners = { osv: boolean; npm: boolean };
  * so mount just reads them; scans happen only on request (`scoutAll` /
  * `scoutIsland`) and arrive as `raid-report` events, one per finished island.
  *
+ * `stale` is only ever computed by `raid_reports` (from the lockfiles on
+ * disk at that moment), so the reports are read again whenever the window
+ * regains focus — the moment a lockfile edited elsewhere could have changed —
+ * with the same in-flight/epoch discipline as `useArchipelago`. (The
+ * archipelago itself refreshes on that same focus, and on founding a
+ * project, which has no report yet: hooking its refresh too would only
+ * read the same reports twice.) A refetch never touches `previous`: it
+ * re-scouted nothing.
+ *
  * `previous` holds the report each event REPLACED, so a caller can diff the
  * two (`sunkFindings`) and show ships going down. It is only populated by
  * events — the first report an island ever gets has nothing to sink.
@@ -29,6 +38,8 @@ export function useRaids(): {
    * where the HUD that shows `error` is not on screen (inside a town). */
   scoutIsland(root: string): Promise<string | null>;
   previous: Map<string, RaidReport>;
+  /** Asks the backend again which scanners are installed. */
+  refreshScanners(): void;
 } {
   // One state object so `previous` can be derived from `reports` inside a
   // single PURE updater (StrictMode double-invokes updaters; a nested
@@ -49,32 +60,54 @@ export function useRaids(): {
   const scoutGenRef = useRef(0);
   // Same dead-mount guard as `useWorld` (StrictMode mount/cleanup/remount).
   const epochRef = useRef(0);
+  const fetchScannersRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     const epoch = ++epochRef.current;
     const live = () => epoch === epochRef.current;
 
-    // An event that lands before the initial fetch settles is newer than the
-    // fetch; the fetch must only fill islands no event has reported yet.
-    invoke<RaidReport[]>("raid_reports")
-      .then((list) => {
-        if (!live()) return;
-        setData((current) => {
-          const next = new Map(current.reports);
-          for (const r of list) if (!next.has(r.root)) next.set(r.root, r);
-          return { ...current, reports: next };
+    // Per-effect-instance, like `useArchipelago`'s (see its doc comment for
+    // why these must not be refs).
+    let inFlight = false;
+    let pendingRefetch = false;
+    const fetchReports = () => {
+      if (inFlight) {
+        pendingRefetch = true;
+        return;
+      }
+      inFlight = true;
+      invoke<RaidReport[]>("raid_reports")
+        .then((list) => {
+          if (!live()) return;
+          setData((current) => {
+            const reports = mergeFetched(current.reports, list);
+            return reports === current.reports ? current : { ...current, reports };
+          });
+        })
+        .catch((e) => {
+          if (live()) setError(String(e));
+        })
+        .finally(() => {
+          inFlight = false;
+          if (live() && pendingRefetch) {
+            pendingRefetch = false;
+            fetchReports();
+          }
         });
-      })
-      .catch((e) => {
-        if (live()) setError(String(e));
-      });
-    invoke<RaidScanners>("raid_scanners")
-      .then((s) => {
-        if (live()) setScanners(s);
-      })
-      .catch((e) => {
-        if (live()) setError(String(e));
-      });
+    };
+    const fetchScanners = () => {
+      invoke<RaidScanners>("raid_scanners")
+        .then((s) => {
+          if (live()) setScanners(s);
+        })
+        .catch((e) => {
+          if (live()) setError(String(e));
+        });
+    };
+    fetchScannersRef.current = fetchScanners;
+    fetchReports();
+    fetchScanners();
+    window.addEventListener("focus", fetchReports);
 
     const unlistenReport = listen<RaidReport>("raid-report", (event) => {
       if (!live()) return;
@@ -99,6 +132,7 @@ export function useRaids(): {
 
     return () => {
       epochRef.current += 1;
+      window.removeEventListener("focus", fetchReports);
       unlistenReport.then((f) => f());
       unlistenDone.then((f) => f());
     };
@@ -147,5 +181,28 @@ export function useRaids(): {
     }
   }, []);
 
-  return { reports, scanners, scouting, error, scoutAll, scoutIsland, previous };
+  // Which scanners are installed can change while the app is open
+  // (`brew install osv-scanner`); the scout sheet asks again on opening.
+  const refreshScanners = useCallback(() => fetchScannersRef.current(), []);
+
+  return { reports, scanners, scouting, error, scoutAll, scoutIsland, previous, refreshScanners };
+}
+
+/** Folds a `raid_reports` answer into the held reports. A fetched report
+ * replaces the held one only when it is at least as new (`scanned_at`), so a
+ * refetch can flip `stale` while an event-delivered report that is newer
+ * than the fetch (it landed while the fetch was in flight) always wins. An
+ * unchanged report keeps its identity, and nothing changed returns `held`
+ * itself, so a routine refocus re-renders nothing. */
+function mergeFetched(held: Map<string, RaidReport>, list: RaidReport[]): Map<string, RaidReport> {
+  let next: Map<string, RaidReport> | null = null;
+  for (const r of list) {
+    const old = held.get(r.root);
+    if (old && (r.scanned_at < old.scanned_at || (r.scanned_at === old.scanned_at && r.stale === old.stale))) {
+      continue;
+    }
+    next ??= new Map(held);
+    next.set(r.root, r);
+  }
+  return next ?? held;
 }

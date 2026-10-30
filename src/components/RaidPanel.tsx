@@ -4,7 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type { SwitchTarget } from "../agentSwitcher";
 import type { SeaIsland } from "../archipelago";
 import { formatLastChanged } from "../lastChanged";
-import { findingKey, findingsOf, SEVERITY_COLOR, type Finding, type RaidReport, type Severity } from "../raids";
+import { findingKey, findingsOf, SEVERITY_COLOR, SEVERITY_RANK, type Finding, type RaidReport } from "../raids";
 import { DefendComposer } from "./DefendComposer";
 import { SCOUT_PREVIEW_NOTE } from "./ScoutSheet";
 import { useStartAgentFlow } from "./StartAgent";
@@ -12,9 +12,6 @@ import { useStartAgentFlow } from "./StartAgent";
 export const STALE_BANNER = "The lockfiles changed since this scout — rescout";
 export const DEFEND_LABEL = "Send an agent to defend";
 export const START_FIRST_LABEL = "Start an agent first";
-
-/** Worst first, matching the order ships are drawn in. */
-const RANK: Record<Severity, number> = { critical: 0, high: 1, moderate: 2, low: 3, unknown: 4 };
 
 /** A scanner-supplied URL is only ever handed to the OS opener when it is
  * plainly a web page; anything else renders as text. */
@@ -67,7 +64,7 @@ export function RaidPanel({
 }) {
   const { view, agents, attention } = seaIsland;
   const root = view.root;
-  const findings = useMemo(() => findingsOf(report).slice().sort((a, b) => RANK[a.severity] - RANK[b.severity]), [report]);
+  const findings = useMemo(() => findingsOf(report).slice().sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]), [report]);
   // Unchecked, not checked, is what gets stored: a finding that appears on a
   // rescout is checked by default like every other, with no reset needed.
   const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(() => new Set());
@@ -129,7 +126,11 @@ export function RaidPanel({
       <h3 className="island-panel__name">{view.name}</h3>
       <p className="island-panel__path">{root}</p>
       {scoutedLine && <p className="raid-panel__scouted">{scoutedLine}</p>}
-      {report?.stale && <p className="raid-panel__stale" role="status">{STALE_BANNER}</p>}
+      {/* Only a scan that read something can be stale; an unscouted report
+          already says it checked nothing. */}
+      {report?.stale && report.status.kind !== "unscouted" && (
+        <p className="raid-panel__stale" role="status">{STALE_BANNER}</p>
+      )}
 
       {report === undefined ? (
         <p className="raid-panel__calm">Not scouted yet.</p>

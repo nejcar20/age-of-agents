@@ -4,10 +4,12 @@ import type { RaidScanners } from "../useRaids";
 
 export const SCOUT_SHEET_TITLE = "Scout for threats";
 
-/** What each scanner is called on screen, and how to get it when missing. */
-const SCANNERS: { key: keyof RaidScanners; name: string; install: string }[] = [
+/** What each scanner is called on screen, and how to get it when missing.
+ * Only osv-scanner gets an install command: it is the one scanner the app
+ * recommends; npm is merely used when it happens to be there. */
+const SCANNERS: { key: keyof RaidScanners; name: string; install: string | null }[] = [
   { key: "osv", name: "osv-scanner", install: "brew install osv-scanner" },
-  { key: "npm", name: "npm", install: "brew install node" },
+  { key: "npm", name: "npm", install: null },
 ];
 
 /** Shown on the sheet when Scout is disabled in the browser preview — the
@@ -21,9 +23,10 @@ export const SCOUT_PREVIEW_NOTE = "Scouting is disabled in the preview.";
  * single click: this sheet says what will happen, with which scanners, over
  * how many islands, and that it uses the network.
  *
- * Portalled to `<body>`: it is opened from inside the HUD's search slip,
- * and a `position: fixed` overlay inside an ancestor with a
- * `backdrop-filter` is positioned against that ancestor, not the window.
+ * Portalled to `<body>`: it is opened from the HUD's button column
+ * (`ScoutControl`), and a `position: fixed` overlay inside an ancestor with
+ * a `backdrop-filter` would be positioned against that ancestor, not the
+ * window.
  */
 export function ScoutSheet({
   scanners,
@@ -52,6 +55,8 @@ export function ScoutSheet({
               <li key={s.key} className={scanners[s.key] ? "" : "scout-sheet__missing"}>
                 {scanners[s.key] ? (
                   `${s.name} ✓ found`
+                ) : s.install === null ? (
+                  `${s.name} — not found`
                 ) : (
                   <>
                     {s.name} — not installed (<code>{s.install}</code>)
@@ -98,6 +103,9 @@ export type ScoutControlProps = {
   onScoutAll: () => void;
   /** The browser preview: the sheet still opens, Scout does not. */
   disabled: boolean;
+  /** Called each time the sheet opens, so the scanner list it shows is
+   * current (`useRaids().refreshScanners`). */
+  onOpen?: () => void;
 };
 
 /**
@@ -106,7 +114,7 @@ export type ScoutControlProps = {
  * button column rather than the search slip: the slip grows leftward from
  * the right edge, and a wider slip covered the title banner.
  */
-export function ScoutControl({ scanners, islandCount, scouting, error, onScoutAll, disabled }: ScoutControlProps) {
+export function ScoutControl({ scanners, islandCount, scouting, error, onScoutAll, disabled, onOpen }: ScoutControlProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   // A scout error ("already scouting", a scanner crash) is shown, then
   // cleared after a while — and shown again whenever a new one arrives.
@@ -128,7 +136,10 @@ export function ScoutControl({ scanners, islandCount, scouting, error, onScoutAl
         aria-pressed={scouting !== null}
         // One scout at a time: while one runs, its progress is the answer.
         disabled={scouting !== null}
-        onClick={() => setSheetOpen(true)}
+        onClick={() => {
+          onOpen?.();
+          setSheetOpen(true);
+        }}
       >
         {/* A spyglass, drawn in the same 24-unit, 2.2-stroke hand as the
             column's other glyphs. */}

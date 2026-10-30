@@ -8,6 +8,7 @@ import {
   raidColor,
   shipsFor,
   showsCleanFlag,
+  sinkBaseline,
   sunkFindings,
   type Finding,
   type RaidReport,
@@ -204,8 +205,10 @@ export function PirateShips({
   useEffect(() => {
     const shown = shownRef.current;
     shownRef.current = report;
-    if (!report || !shown || shown === report) return;
-    const before = previous ?? shown;
+    // Only a new scan sinks anything: a refetch that just flipped `stale`
+    // (same `scanned_at`) must not replay the last rescout's sinking.
+    const before = sinkBaseline(shown, report, previous);
+    if (!report || !before) return;
     const drawn = shipsFor(before).ships;
     const gone = new Set(sunkFindings(before, report).map(findingKey));
     const now = performance.now();

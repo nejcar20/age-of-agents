@@ -65,6 +65,17 @@ it("stale_banner_shown", () => {
   expect(screen.getByText("The lockfiles changed since this scout — rescout")).toBeTruthy();
 });
 
+it("no stale banner on an unscouted report: there was no scout to be stale", () => {
+  render(<RaidPanel {...props({ report: report({ stale: true, status: { kind: "unscouted", reason: "no lockfile found" } }) })} />);
+  expect(screen.queryByText("The lockfiles changed since this scout — rescout")).toBeNull();
+});
+
+it("an unknown-severity finding is listed with moderate, above low", () => {
+  render(<RaidPanel {...props({ report: report({ status: { kind: "raided", findings: [f("LOW-1", "low"), f("UNK-1", "unknown"), f("MOD-1", "moderate")] } }) })} />);
+  const rows = screen.getAllByRole("listitem");
+  expect(rows.map((r) => within(r).getByRole("link").textContent)).toEqual(["MOD-1", "UNK-1", "LOW-1"]);
+});
+
 it("uncovered_listed_as_not_checked", () => {
   render(<RaidPanel {...props({ report: report({ uncovered: ["poetry.lock", "go.sum"] }) })} />);
   expect(screen.getByText("Not checked: poetry.lock, go.sum")).toBeTruthy();
