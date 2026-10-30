@@ -3,12 +3,15 @@
 use serde::{Deserialize, Serialize};
 
 /// Declared lowest to highest so the derived `Ord` makes `Critical` the
-/// greatest; sorting descending puts the worst attackers first.
+/// greatest; sorting descending puts the worst attackers first. `Unknown`
+/// sits just below `Moderate`, not below `Low`: it is drawn like moderate
+/// (something is wrong, not how badly), and the frontend's `SEVERITY_RANK`
+/// orders it the same way.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
-    Unknown,
     Low,
+    Unknown,
     Moderate,
     High,
     Critical,
@@ -190,6 +193,20 @@ mod tests {
                 ("B", Severity::Low, "l"),
             ]
         );
+    }
+
+    #[test]
+    fn unknown_severity_ranks_with_moderate_above_low() {
+        // Drawn like moderate (we were told something is wrong, not how
+        // badly), so it must never sort below a known-low finding.
+        let out = dedup(vec![
+            finding("L", Severity::Low, "a", "l"),
+            finding("U", Severity::Unknown, "a", "l"),
+            finding("M", Severity::Moderate, "a", "l"),
+            finding("H", Severity::High, "a", "l"),
+        ]);
+        let ids: Vec<_> = out.iter().map(|f| f.id.as_str()).collect();
+        assert_eq!(ids, ["H", "M", "U", "L"]);
     }
 
     #[test]

@@ -121,7 +121,8 @@ counters that go up when you run more agents.
   "partly scouted: Cargo.lock not checked (install osv-scanner)" and gets no
   flag. Findings always show, gaps or not
 - If an island's lockfiles change after a scout, its ships turn grey, lose
-  their smoke and flag, and the panel says to rescout. Nothing rescans by itself
+  their smoke and flag, and the panel says to rescout. This is checked again
+  whenever the window regains focus. Nothing rescans by itself
 
 **In a town**
 
@@ -337,7 +338,10 @@ completeness. The long version is in
   from a real run, so a different version's flags or output may need a fix.
 - **Raids: worktrees are not scanned separately.** A raid describes the
   island's main checkout only.
-- **Raids: lockfiles inside git submodules are not checked.**
+- **Raids: lockfiles inside git submodules are checked only by
+  `osv-scanner`**, whose recursive scan walks into them. With `npm audit`
+  alone, a repository with submodules is shown as partly scouted (the
+  submodule is named as not checked), never clean.
 - **Raids: no secret scanning or static analysis.** Only known vulnerable
   dependencies; container and infrastructure files are not scanned.
 - **A repository vendored inside a pruned directory** (`node_modules` and

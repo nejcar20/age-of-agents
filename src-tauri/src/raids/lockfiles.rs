@@ -51,6 +51,36 @@ pub fn discover_lockfiles(root: &Path) -> Result<Vec<String>, String> {
     Ok(found)
 }
 
+/// Repo-relative paths of the repo's submodules (index gitlinks, mode
+/// 160000), sorted. `git ls-files -co` does not descend into a submodule, so
+/// its lockfiles are invisible to `discover_lockfiles`: the scout must treat
+/// each one as a gap unless the scanner shows it actually read inside it.
+pub fn discover_submodules(root: &Path) -> Result<Vec<String>, String> {
+    let mut command = Command::new("git");
+    command.args(["ls-files", "-s", "-z"]).current_dir(root);
+    let output = run_bounded(command, LIST_LIMIT, Instant::now() + LIST_DEADLINE, "Git")?;
+    // A partial list could hide a submodule and wrongly allow a Clean verdict.
+    if output.truncated {
+        return Err("too many files to list".into());
+    }
+    if !output.status.success() {
+        return Err("git could not list files".into());
+    }
+    // Each entry is "<mode> <object> <stage>\t<path>".
+    let mut found: Vec<String> = output
+        .stdout
+        .split(|b| *b == 0)
+        .filter_map(|raw| {
+            let entry = String::from_utf8_lossy(raw);
+            let (meta, path) = entry.split_once('\t')?;
+            meta.starts_with("160000 ").then(|| path.replace('\\', "/"))
+        })
+        .collect();
+    found.sort();
+    found.dedup();
+    Ok(found)
+}
+
 /// npm audit only runs at the repo root, so nested lockfiles stay uncovered.
 pub fn npm_audit_coverage(lockfiles: &[String]) -> (Vec<String>, Vec<String>) {
     lockfiles
@@ -154,6 +184,40 @@ mod tests {
             discover_lockfiles(root).unwrap(),
             s(&["Cargo.lock", "web/yarn.lock"])
         );
+    }
+
+    #[test]
+    fn lists_submodule_gitlinks() {
+        let repo = repository();
+        let root = repo.path();
+        write(root, "Cargo.lock", "a");
+        assert_eq!(discover_submodules(root).unwrap(), Vec::<String>::new());
+        // A gitlink (mode 160000) is what `git submodule add` records; no
+        // real submodule checkout is needed to list it.
+        for path in ["vendor/lib", "deps/other"] {
+            let status = Command::new("git")
+                .args([
+                    "update-index",
+                    "--add",
+                    "--cacheinfo",
+                    &format!("160000,{},{path}", "1".repeat(40)),
+                ])
+                .current_dir(root)
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+        Command::new("git")
+            .args(["add", "Cargo.lock"])
+            .current_dir(root)
+            .status()
+            .unwrap();
+        assert_eq!(
+            discover_submodules(root).unwrap(),
+            s(&["deps/other", "vendor/lib"])
+        );
+        // The gitlink itself is never mistaken for a lockfile.
+        assert_eq!(discover_lockfiles(root).unwrap(), s(&["Cargo.lock"]));
     }
 
     #[test]

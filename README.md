@@ -93,7 +93,9 @@ real advisory, then send an agent to defend. It only ever runs when you press
 Scout: it uses [osv-scanner](https://google.github.io/osv-scanner/) if you have
 it (`brew install osv-scanner`), otherwise `npm audit`, and both check public
 advisory databases over the network. An island is never called clean unless
-every lockfile in it was checked.
+every lockfile in it was checked. Lockfiles inside git submodules are checked
+by osv-scanner's recursive scan; with `npm audit` only, a repository with
+submodules is shown as partly scouted, never clean.
 
 | At sea or in town | Means |
 | --- | --- |

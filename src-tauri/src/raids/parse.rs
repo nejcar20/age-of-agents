@@ -146,11 +146,16 @@ pub fn parse_osv(json: &[u8], root: &Path) -> Result<(Vec<Finding>, Vec<String>)
                     Some(label) => severity_from_label(label),
                     None => group_severity(groups, id),
                 };
+                // Only the affected entry for THIS package: one advisory can
+                // name several packages, each fixed in its own version.
                 let fixed_in = vuln
                     .get("affected")
                     .and_then(Value::as_array)
                     .into_iter()
                     .flatten()
+                    .filter(|a| {
+                        name.is_some() && a.pointer("/package/name").and_then(Value::as_str) == name
+                    })
                     .filter_map(|a| a.get("ranges").and_then(Value::as_array))
                     .flatten()
                     .filter_map(|r| r.get("events").and_then(Value::as_array))
@@ -292,6 +297,21 @@ mod tests {
         let (f, _) = parse_osv(body, Path::new("/r")).unwrap();
         assert_eq!(f[0].severity, Severity::Unknown);
         assert_eq!(f[0].fixed_in, None);
+    }
+
+    #[test]
+    fn osv_fixed_in_comes_from_the_findings_own_package() {
+        // One advisory can affect several packages; only the entry for THIS
+        // package says which version fixes it here.
+        let body = br#"{"results":[{"source":{"path":"/r/a.lock"},"packages":[
+            {"package":{"name":"p","version":"1"},"vulnerabilities":[{"id":"X-1","affected":[
+                {"package":{"name":"other"},"ranges":[{"events":[{"introduced":"0"},{"fixed":"9.9.9"}]}]},
+                {"package":{"name":"p"},"ranges":[{"events":[{"introduced":"0"},{"fixed":"1.2.3"}]}]}]}]},
+            {"package":{"name":"q","version":"1"},"vulnerabilities":[{"id":"X-2","affected":[
+                {"package":{"name":"other"},"ranges":[{"events":[{"introduced":"0"},{"fixed":"9.9.9"}]}]}]}]}]}]}"#;
+        let (f, _) = parse_osv(body, Path::new("/r")).unwrap();
+        assert_eq!(f[0].fixed_in.as_deref(), Some("1.2.3"));
+        assert_eq!(f[1].fixed_in, None);
     }
 
     #[test]

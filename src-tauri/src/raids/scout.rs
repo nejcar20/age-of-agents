@@ -1,13 +1,16 @@
 //! Scouting: running whichever scanner is installed against one island root,
 //! remembering the report, and the Tauri commands the frontend calls.
 
-use super::lockfiles::{discover_lockfiles, fingerprint, is_stale, npm_audit_coverage};
+use super::lockfiles::{
+    discover_lockfiles, discover_submodules, fingerprint, is_stale, npm_audit_coverage,
+};
 use super::model::{decide_status, RaidReport, RaidStatus};
 use super::parse::{parse_npm_audit, parse_osv};
 use crate::commands::AppState;
 use crate::process::{resolve_executable, run_bounded, BoundedOutput};
 use crate::world::repo::normalize_path;
 use std::collections::{HashMap, VecDeque};
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -88,12 +91,41 @@ fn run_scanner(
     }
 }
 
+/// The scanner's own directory, then the inherited PATH, without repeats.
+/// npm is a `#!/usr/bin/env node` script: an app opened from Finder inherits
+/// launchd's minimal PATH, where `env` finds no `node` even though
+/// `resolve_executable` found npm in a Homebrew directory beside it.
+fn path_for_child(program: &Path, inherited: Option<&OsStr>) -> OsString {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    let own = program.parent().map(Path::to_path_buf);
+    let rest = inherited.into_iter().flat_map(std::env::split_paths);
+    for dir in own.into_iter().chain(rest) {
+        if !dir.as_os_str().is_empty() && !dirs.contains(&dir) {
+            dirs.push(dir);
+        }
+    }
+    // Only fails for a directory containing the separator itself; the
+    // inherited PATH is then still better than none.
+    std::env::join_paths(dirs)
+        .unwrap_or_else(|_| inherited.map(OsStr::to_os_string).unwrap_or_default())
+}
+
+/// A scanner command whose child can find the scanner's own interpreter.
+fn scanner_command(program: &Path) -> Command {
+    let mut command = Command::new(program);
+    command.env(
+        "PATH",
+        path_for_child(program, std::env::var_os("PATH").as_deref()),
+    );
+    command
+}
+
 fn scan_osv(
     root: &Path,
     osv: &Path,
     run: &dyn Fn(Command) -> Result<BoundedOutput, String>,
 ) -> Scan {
-    let mut command = Command::new(osv);
+    let mut command = scanner_command(osv);
     // osv-scanner v2 syntax; v1 spelled this `--format json -r <root>`.
     // `--all-packages` (v1: `--experimental-all-packages`) makes the JSON list
     // every source it read, not only those with vulnerabilities; without it a
@@ -134,7 +166,7 @@ fn scan_npm(
     lockfile: &str,
     run: &dyn Fn(Command) -> Result<BoundedOutput, String>,
 ) -> Scan {
-    let mut command = Command::new(npm);
+    let mut command = scanner_command(npm);
     // `--package-lock-only` audits the lockfile as written, without needing
     // (or touching) node_modules.
     command
@@ -150,6 +182,52 @@ fn scan_npm(
         },
         Err(reason) => Scan::Failed(reason),
     }
+}
+
+/// The lockfile the scanner read for `lockfile`: itself, except that
+/// osv-scanner reads Go dependencies from the sibling go.mod, not go.sum.
+fn source_for(lockfile: &str) -> Option<String> {
+    let dir = match lockfile.rfind('/') {
+        Some(i) => &lockfile[..=i],
+        None => "",
+    };
+    (lockfile == "go.sum" || lockfile.ends_with("/go.sum")).then(|| format!("{dir}go.mod"))
+}
+
+/// Splits what the repo holds into (covered, uncovered) given the paths the
+/// scanner says it `read`. A discovered lockfile is covered when it (or, for
+/// go.sum, its go.mod) was read; a source read outside the discovered list
+/// (another manifest, a lockfile inside a submodule) is reported as covered
+/// too, except a go.mod already standing for its go.sum. A submodule is a
+/// gap unless something under it was read: neither `git ls-files` nor npm
+/// audit looks inside one, only osv-scanner's recursive walk does.
+fn coverage(
+    discovered: &[String],
+    submodules: &[String],
+    read: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let was_read = |path: &String| {
+        read.contains(path) || source_for(path).is_some_and(|source| read.contains(&source))
+    };
+    let (mut covered, mut uncovered): (Vec<String>, Vec<String>) =
+        discovered.iter().cloned().partition(was_read);
+    let stands_in: Vec<String> = covered.iter().filter_map(|path| source_for(path)).collect();
+    covered.extend(
+        read.iter()
+            .filter(|path| !discovered.contains(path) && !stands_in.contains(path))
+            .cloned(),
+    );
+    uncovered.extend(
+        submodules
+            .iter()
+            .filter(|sub| !read.iter().any(|path| path.starts_with(&format!("{sub}/"))))
+            .cloned(),
+    );
+    covered.sort();
+    covered.dedup();
+    uncovered.sort();
+    uncovered.dedup();
+    (covered, uncovered)
 }
 
 /// Scouts one CANONICAL root (the `IslandView.root` spelling): `parse_osv`
@@ -173,7 +251,9 @@ pub fn scout_root(
         },
         stale: false,
     };
-    let discovered = match discover_lockfiles(root) {
+    let listed = discover_lockfiles(root)
+        .and_then(|found| discover_submodules(root).map(|subs| (found, subs)));
+    let (discovered, submodules) = match listed {
         Ok(found) => found,
         Err(e) => {
             report.status = RaidStatus::Unscouted {
@@ -183,7 +263,7 @@ pub fn scout_root(
         }
     };
     report.fingerprint = fingerprint(root, &discovered);
-    if discovered.is_empty() {
+    if discovered.is_empty() && submodules.is_empty() {
         report.status = decide_status(vec![], &[], &[]);
         return report;
     }
@@ -201,13 +281,10 @@ pub fn scout_root(
 
     match scan {
         Scan::Done { findings, covered } => {
-            report.uncovered = discovered
-                .iter()
-                .filter(|path| !covered.contains(path))
-                .cloned()
-                .collect();
-            report.status = decide_status(findings, &covered, &report.uncovered);
+            let (covered, uncovered) = coverage(&discovered, &submodules, &covered);
+            report.status = decide_status(findings, &covered, &uncovered);
             report.covered = covered;
+            report.uncovered = uncovered;
         }
         Scan::Failed(reason) => report.status = RaidStatus::Unscouted { reason },
     }
@@ -639,6 +716,137 @@ mod tests {
         let (_empty, bare) = repository(&[]);
         let report = scout_root(&bare, &osv_only(), 1, &never);
         assert_eq!(reason(&report), "no lockfile found");
+    }
+
+    /// The child's PATH, as the command would hand it over.
+    fn child_path(command: &Command) -> Option<std::ffi::OsString> {
+        command
+            .get_envs()
+            .find(|(key, _)| *key == "PATH")
+            .and_then(|(_, value)| value.map(|v| v.to_os_string()))
+    }
+
+    #[test]
+    fn scanner_child_path_starts_with_the_scanners_own_directory() {
+        // npm is a `#!/usr/bin/env node` script: launched from Finder, the
+        // inherited PATH has no Homebrew directory, so `node` is only found
+        // when the scanner's own directory leads the child's PATH.
+        let (_dir, root) = repository(&["package-lock.json"]);
+        let seen = std::cell::RefCell::new(Vec::new());
+        let run = |command: Command| {
+            seen.borrow_mut().push(child_path(&command));
+            Ok(output(
+                0,
+                br#"{"auditReportVersion":2,"vulnerabilities":{}}"#,
+                "",
+                false,
+            ))
+        };
+        scout_root(&root, &npm_only(), 1, &run);
+        let body = OSV_CLEAN.replace("/fake/repo", &root.to_string_lossy());
+        let run_osv = |command: Command| {
+            seen.borrow_mut().push(child_path(&command));
+            Ok(output(0, body.as_bytes(), "", false))
+        };
+        scout_root(&root, &osv_only(), 1, &run_osv);
+        for path in seen.borrow().iter() {
+            let path = path.clone().expect("the child's PATH is set");
+            let first = std::env::split_paths(&path).next();
+            assert_eq!(first, Some(PathBuf::from("/opt/homebrew/bin")));
+        }
+        assert_eq!(seen.borrow().len(), 2);
+    }
+
+    #[test]
+    fn child_path_prepends_and_dedups() {
+        let joined = |dirs: &[&str]| std::env::join_paths(dirs).unwrap();
+        let inherited = joined(&["/usr/bin", "/opt/homebrew/bin", "/bin"]);
+        assert_eq!(
+            path_for_child(Path::new("/opt/homebrew/bin/npm"), Some(&inherited)),
+            joined(&["/opt/homebrew/bin", "/usr/bin", "/bin"])
+        );
+        assert_eq!(
+            path_for_child(Path::new("/opt/homebrew/bin/npm"), None),
+            joined(&["/opt/homebrew/bin"])
+        );
+    }
+
+    #[test]
+    fn osv_reading_go_mod_covers_its_go_sum() {
+        // osv-scanner reads Go dependencies from go.mod, so its source is
+        // go.mod while the lockfile discovered is the sibling go.sum.
+        let (_dir, root) = repository(&["go.sum", "go.mod", "tools/go.sum"]);
+        let body = format!(
+            r#"{{"results":[{{"source":{{"path":"{0}/go.mod"}},"packages":[]}},
+                {{"source":{{"path":"{0}/package.json"}},"packages":[]}}]}}"#,
+            root.to_string_lossy()
+        );
+        let run = |_: Command| Ok(output(0, body.as_bytes(), "", false));
+        let report = scout_root(&root, &osv_only(), 1, &run);
+        // tools/go.sum's go.mod was not read: still a gap.
+        assert_eq!(report.uncovered, ["tools/go.sum"]);
+        assert_eq!(report.covered, ["go.sum", "package.json"]);
+
+        let (_dir, root) = repository(&["go.sum", "go.mod"]);
+        let body = format!(
+            r#"{{"results":[{{"source":{{"path":"{}/go.mod"}},"packages":[]}}]}}"#,
+            root.to_string_lossy()
+        );
+        let run = |_: Command| Ok(output(0, body.as_bytes(), "", false));
+        let report = scout_root(&root, &osv_only(), 1, &run);
+        assert!(report.uncovered.is_empty());
+        assert_eq!(report.covered, ["go.sum"]);
+        assert_eq!(report.status, RaidStatus::Clean);
+    }
+
+    /// Records a submodule at `path` (a gitlink, as `git submodule add` does).
+    fn add_gitlink(root: &Path, path: &str) {
+        let status = Command::new("git")
+            .args([
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                &format!("160000,{},{path}", "1".repeat(40)),
+            ])
+            .current_dir(root)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[test]
+    fn npm_only_with_a_submodule_is_never_clean() {
+        let (_dir, root) = repository(&["package-lock.json"]);
+        add_gitlink(&root, "vendor/lib");
+        let clean = br#"{"auditReportVersion":2,"vulnerabilities":{}}"#;
+        let run = |_: Command| Ok(output(0, clean, "", false));
+        let report = scout_root(&root, &npm_only(), 1, &run);
+        assert_eq!(report.uncovered, ["vendor/lib"]);
+        assert_eq!(
+            reason(&report),
+            "partly scouted: vendor/lib not checked (install osv-scanner)"
+        );
+    }
+
+    #[test]
+    fn osv_covers_a_submodule_it_read_into() {
+        let (_dir, root) = repository(&["Cargo.lock"]);
+        add_gitlink(&root, "vendor/lib");
+        add_gitlink(&root, "vendor/empty");
+        let body = format!(
+            r#"{{"results":[{{"source":{{"path":"{0}/Cargo.lock"}},"packages":[]}},
+                {{"source":{{"path":"{0}/vendor/lib/package-lock.json"}},"packages":[]}}]}}"#,
+            root.to_string_lossy()
+        );
+        let run = |_: Command| Ok(output(0, body.as_bytes(), "", false));
+        let report = scout_root(&root, &osv_only(), 1, &run);
+        // vendor/lib was walked (osv --recursive); vendor/empty was not, and
+        // nothing says it holds no lockfile.
+        assert_eq!(report.uncovered, ["vendor/empty"]);
+        assert_eq!(
+            report.covered,
+            ["Cargo.lock", "vendor/lib/package-lock.json"]
+        );
     }
 
     fn report_for(root: &str) -> RaidReport {
