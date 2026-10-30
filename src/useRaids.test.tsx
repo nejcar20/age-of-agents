@@ -79,4 +79,30 @@ describe("useRaids", () => {
     expect(screen.getByTestId("scouting").textContent).toBe("none");
     expect(screen.getByTestId("error").textContent).toContain("already scouting");
   });
+
+  it("done_before_scout_all_resolves_ends_with_scouting_null", async () => {
+    let resolveAll!: (n: number) => void;
+    setup({ raid_reports: [], raid_scanners: { osv: true, npm: true } });
+    const base = invokeMock.getMockImplementation()!;
+    invokeMock.mockImplementation((cmd: string) =>
+      cmd === "scout_all" ? new Promise<number>((r) => { resolveAll = r; }) : base(cmd));
+    render(<Probe />);
+    await waitFor(() => expect(handlers["raid-report"]).toBeDefined());
+    let p!: Promise<void>;
+    act(() => { p = api.scoutAll(); });
+    expect(screen.getByTestId("scouting").textContent).toBe("0/0");
+    act(() => handlers["raid-report"]({ payload: rep("/p/a", "clean") }));
+    expect(screen.getByTestId("scouting").textContent).toBe("1/0");
+    act(() => handlers["raid-scout-done"]({ payload: null }));
+    await act(async () => { resolveAll(1); await p; });
+    expect(screen.getByTestId("scouting").textContent).toBe("none");
+  });
+
+  it("scout_all_count_zero_ends_with_scouting_null", async () => {
+    setup({ raid_reports: [], raid_scanners: { osv: true, npm: true }, scout_all: 0 });
+    render(<Probe />);
+    await waitFor(() => expect(handlers["raid-report"]).toBeDefined());
+    await act(async () => { await api.scoutAll(); });
+    expect(screen.getByTestId("scouting").textContent).toBe("none");
+  });
 });

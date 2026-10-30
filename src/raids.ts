@@ -159,8 +159,11 @@ export function defendPrompt(root: string, findings: Finding[], agentCwd: string
 const findingKey = (f: Finding) => `${f.id}\u0000${f.package}\u0000${f.lockfile}`;
 
 /** Findings present in the previous report but gone after a re-scout — the
- * ships to sink. A stale or absent `before` has nothing to compare against. */
+ * ships to sink. Only a fresh, completed scan can prove a fix: an unscouted
+ * or stale `after` says nothing about what is still there, so it sinks
+ * nothing. An absent `before` has nothing to compare against. */
 export function sunkFindings(before: RaidReport | undefined, after: RaidReport): Finding[] {
+  if (after.stale || (after.status.kind !== "clean" && after.status.kind !== "raided")) return [];
   const still = new Set(findingsOf(after).map(findingKey));
   return findingsOf(before).filter((f) => !still.has(findingKey(f)));
 }

@@ -109,6 +109,14 @@ describe("raids", () => {
     expect(sunkFindings(raided([a]), raided([{ ...a, lockfile: "Cargo.lock" }]))).toEqual([a]);
   });
 
+  it("sunk_findings_ignore_unscouted_or_stale_rescouts", () => {
+    const a = finding("A", "high");
+    const before = raided([a]);
+    expect(sunkFindings(before, report({ kind: "unscouted", reason: "x" }))).toEqual([]);
+    expect(sunkFindings(before, report({ kind: "clean" }, { stale: true }))).toEqual([]);
+    expect(sunkFindings(before, report({ kind: "clean" }))).toEqual([a]);
+  });
+
   it("under_attack_filter_matches_only_raided_islands", () => {
     expect(matchesStateFilter("stopped", "under_attack", true)).toBe(true);
     expect(matchesStateFilter("stopped", "under_attack", false)).toBe(false);
