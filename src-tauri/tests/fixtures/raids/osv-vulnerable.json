@@ -1,0 +1,91 @@
+{
+  "results": [
+    {
+      "source": { "path": "/fake/repo/package-lock.json", "type": "lockfile" },
+      "packages": [
+        {
+          "package": { "name": "lodash", "version": "4.17.11", "ecosystem": "npm" },
+          "vulnerabilities": [
+            {
+              "id": "GHSA-jf85-cpcp-j695",
+              "summary": "Prototype Pollution in lodash",
+              "aliases": ["CVE-2019-10744"],
+              "affected": [
+                {
+                  "package": { "name": "lodash", "ecosystem": "npm" },
+                  "ranges": [
+                    {
+                      "type": "SEMVER",
+                      "events": [{ "introduced": "0" }, { "fixed": "4.17.12" }]
+                    }
+                  ]
+                }
+              ],
+              "database_specific": { "severity": "CRITICAL" }
+            }
+          ]
+        },
+        {
+          "package": { "name": "minimist", "version": "1.2.0", "ecosystem": "npm" },
+          "vulnerabilities": [
+            {
+              "id": "GHSA-vh95-rmgr-6w4m",
+              "summary": "Prototype Pollution in minimist",
+              "aliases": ["CVE-2020-7598"],
+              "affected": [
+                {
+                  "package": { "name": "minimist", "ecosystem": "npm" },
+                  "ranges": [
+                    {
+                      "type": "SEMVER",
+                      "events": [{ "introduced": "0" }, { "fixed": "1.2.3" }]
+                    }
+                  ]
+                }
+              ],
+              "database_specific": { "severity": "MODERATE" }
+            }
+          ]
+        }
+      ],
+      "groups": [
+        { "ids": ["GHSA-jf85-cpcp-j695", "CVE-2019-10744"], "aliases": ["GHSA-jf85-cpcp-j695", "CVE-2019-10744"], "max_severity": "9.1" },
+        { "ids": ["GHSA-vh95-rmgr-6w4m", "CVE-2020-7598"], "aliases": ["GHSA-vh95-rmgr-6w4m", "CVE-2020-7598"], "max_severity": "5.6" }
+      ]
+    },
+    {
+      "source": { "path": "/fake/repo/services/api/Cargo.lock", "type": "lockfile" },
+      "packages": [
+        {
+          "package": { "name": "smallvec", "version": "1.6.0", "ecosystem": "crates.io" },
+          "vulnerabilities": [
+            {
+              "id": "RUSTSEC-2021-0003",
+              "summary": "Buffer overflow in SmallVec::insert_many",
+              "aliases": ["CVE-2021-25900", "GHSA-66p5-j55x-w9f8"],
+              "severity": [{ "type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" }],
+              "affected": [
+                {
+                  "package": { "name": "smallvec", "ecosystem": "crates.io" },
+                  "ranges": [
+                    {
+                      "type": "SEMVER",
+                      "events": [{ "introduced": "0.6.3" }, { "fixed": "1.6.1" }]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "groups": [
+        { "ids": ["RUSTSEC-2021-0003", "CVE-2021-25900", "GHSA-66p5-j55x-w9f8"], "aliases": ["RUSTSEC-2021-0003", "CVE-2021-25900", "GHSA-66p5-j55x-w9f8"], "max_severity": "9.8" }
+      ]
+    },
+    {
+      "source": { "path": "/fake/repo/package-lock.json", "type": "lockfile" },
+      "packages": []
+    }
+  ]
+}
