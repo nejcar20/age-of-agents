@@ -105,6 +105,23 @@ counters that go up when you run more agents.
 - Start an agent, resume a previous conversation, or settle a repository that has
   no workspace yet
 - Found an entirely new project — directory, git repo, workspace and agent
+- **Scout for threats** with the round spyglass button in the right-hand
+  column. A sheet lists which scanners were found (and suggests
+  `brew install osv-scanner` if it is missing), then scouts every island,
+  2 at a time, with a "Scouting 3/9…" indicator. Each finding becomes a
+  pirate ship at sea, up to 6 per island, worst first, with a **+N** badge for
+  the rest. Sail colour is severity; an island with a critical or 3+ high
+  findings smokes; a white flag means scouted and clean. Filter to **Under
+  attack** to see only islands with findings. The island panel has a **Threats**
+  row with **Show raid** and **Scout** for one island
+- **Raids only run when you press Scout.** The scan uses `osv-scanner` if it is
+  installed, otherwise `npm audit`, and contacts public advisory databases over
+  the network. An island is *clean* only when there are no findings and every
+  lockfile found was checked. No findings but some lockfiles unchecked reads
+  "partly scouted: Cargo.lock not checked (install osv-scanner)" and gets no
+  flag. Findings always show, gaps or not
+- If an island's lockfiles change after a scout, its ships turn grey, lose
+  their smoke and flag, and the panel says to rescout. Nothing rescans by itself
 
 **In a town**
 
@@ -131,6 +148,19 @@ counters that go up when you run more agents.
   the town visible. Dock below or to the right; drag its divider or use arrow keys.
   Split panes stack when the available space is narrow.
 - Start an agent, without going back to the sea first
+- Raiders gather at the town edge by the building for each finding's lockfile:
+  `package.json` for `package-lock.json`, `yarn.lock` or `pnpm-lock.yaml`;
+  `Cargo.toml` for `Cargo.lock`; `pyproject.toml`, `go.mod` and `Gemfile` for
+  their lockfiles. If that building is missing they stand at the coast. Click a
+  raider group or a ship to open the **Raid panel**: findings by severity, each
+  with advisory link, summary, `installed → fixed_in` and lockfile
+- **Send an agent to defend** opens an editable prompt listing the findings you
+  tick (all by default); nothing is sent until you press Send. With no agent on
+  the island the button reads **Start an agent first**. If the agent works in a
+  worktree, the composer says so: the raid belongs to the island's main
+  checkout, so the ships sink only once the fix reaches it. When the agent is
+  done, press **Rescout**: ships for fixed findings sink and a clean island
+  gets its flag. Rescout always scans the main checkout
 - Watch the town grow while an agent works: it is re-measured every 5
   seconds, a building rises when its file crosses a height bucket, new files
   climb out of the ground, and every real line change floats a short-lived
@@ -231,7 +261,15 @@ This is a short list on purpose, and it is checked at every review:
 | `workspace.create`, `agent.start`, `agent.prompt`, `agent.focus`, `workspace.focus`, `pane.focus`, `notification.show`, `pane.send_text`, `pane.send_keys`, explicit terminal attach/input/resize/scroll/release, and the read-only `agent.read`, `pane.read` and `agent.list` | Everything else — notably `pane.run`, `workspace.close`, and forced terminal takeover |
 | One `git init`, for a project you explicitly create | Every other git write |
 | Writes inside `~/.age-of-agents/`, and the one directory you name when creating a project | Writes anywhere else |
+| `osv-scanner scan` or `npm audit` in a repository, only when you press Scout (they contact public advisory databases) | Running a scanner on a timer, on focus or on save; installing one; any other process |
 | Reading the system clipboard when you press ⌘V in a focused terminal; copying output when you finish selecting it in that terminal | Unprompted clipboard reads or writes, and copying text from other app surfaces |
+
+Raids add four commands: `raid_scanners` (which scanners are installed),
+`raid_reports` (the cached reports), `scout_island` and `scout_all`. Reports
+are cached in `~/.age-of-agents/raids.json`, and `scout_all` emits a
+`raid-report` event per island and `raid-scout-done` when it finishes. A raid
+never sends anything to an agent; defending uses the same confirmed prompt as
+every other brief.
 
 Prompts are composed and sent by you. The app never originates one, never
 re-sends, never retries, and never sends in response to an agent's state.
@@ -294,6 +332,14 @@ completeness. The long version is in
   because the latter is unreliable inside a WKWebView, but nothing in this
   repository launches the app, so the only proof it works is the same kind
   of proof §9 is a list of counterexamples to.
+- **Raids: the `osv-scanner` command line was verified only against its
+  documented v2 JSON.** The test fixtures were written by hand, not captured
+  from a real run, so a different version's flags or output may need a fix.
+- **Raids: worktrees are not scanned separately.** A raid describes the
+  island's main checkout only.
+- **Raids: lockfiles inside git submodules are not checked.**
+- **Raids: no secret scanning or static analysis.** Only known vulnerable
+  dependencies; container and infrastructure files are not scanned.
 - **A repository vendored inside a pruned directory** (`node_modules` and
   friends) will not be found. A deliberate trade for scan speed.
 - **Cold load of the sea** is bounded by the single largest repository's file

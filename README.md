@@ -84,6 +84,27 @@ Every agent, sorted by who needs you. <kbd>⌘</kbd><kbd>K</kbd> finds any
 project or agent; <kbd>Enter</kbd> opens it. Start a new agent in any repo, or
 found a brand-new project, without leaving the app.
 
+### ⚔️ Raids: vulnerabilities attack your islands
+
+Press the spyglass (**Scout for threats**) and the app checks every repository's
+lockfiles for known vulnerable dependencies. Each finding becomes a pirate ship
+circling its island and raiders at the walls of its town. Click one to read the
+real advisory, then send an agent to defend. It only ever runs when you press
+Scout: it uses [osv-scanner](https://google.github.io/osv-scanner/) if you have
+it (`brew install osv-scanner`), otherwise `npm audit`, and both check public
+advisory databases over the network. An island is never called clean unless
+every lockfile in it was checked.
+
+| At sea or in town | Means |
+| --- | --- |
+| A pirate ship | One real finding |
+| Sail colour | Its severity |
+| A floating **+N** | More findings than the ships drawn |
+| A column of smoke | A critical finding, or three or more high ones |
+| A white flag | Scouted, and every lockfile was checked: clean |
+| Grey sails | The lockfiles changed since the scout; rescout |
+| Raiders at `package.json` or `Cargo.toml` | The lockfile that finding came from |
+
 ## Getting started
 
 You need **macOS**, [Node](https://nodejs.org), [Rust](https://rustup.rs) and
@@ -143,8 +164,10 @@ or counters that go up when you run more agents.
 ## Privacy and permissions
 
 Everything runs on your machine. The app talks to Herdr over its local socket
-and to nothing else: no network, no accounts, no telemetry. Everything it
-stores lives in `~/.age-of-agents/`.
+and to nothing else: no accounts, no telemetry. The one exception is a scout,
+which you start yourself: it runs `osv-scanner` or `npm audit`, and those
+contact public advisory databases. Nothing a scout finds is sent to an agent
+until you press Send. Everything the app stores lives in `~/.age-of-agents/`.
 
 It's a cockpit, not an autopilot. It never writes a prompt for you, never
 retries or re-sends, never answers an agent on its own, and never types
