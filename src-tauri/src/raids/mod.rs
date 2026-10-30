@@ -3,5 +3,6 @@
 // are only exercised by tests.
 #![allow(dead_code)]
 
+pub mod lockfiles;
 pub mod model;
 pub mod parse;
