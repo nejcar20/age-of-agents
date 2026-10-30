@@ -475,23 +475,21 @@ function AtlasAppInner({
             onStateFilterChange={setStateFilter}
             onSubmit={submitSearch}
             matchCount={matchCount}
-            scout={{
-              scanners: raids.scanners,
-              islandCount: archipelagoState.kind === "ready" ? archipelagoState.islands.length : 0,
-              scouting: raids.scouting,
-              error: raids.error,
-              onScoutAll: () => void raids.scoutAll(),
-              disabled: seaHarnessProps?.scoutDisabled ?? false,
-            }}
           />
         }
-        // A running scout keeps the slip open — that is where its progress
-        // is shown.
-        searchOpen={searchOpen || searchQuery.trim() !== "" || stateFilter !== "all" || raids.scouting !== null}
+        searchOpen={searchOpen || searchQuery.trim() !== "" || stateFilter !== "all"}
         onToggleSearch={() => setSearchOpen((open) => !open)}
         listOpen={showPanel}
         onToggleList={() => setShowPanel((v) => !v)}
         onNewProject={() => setShowNewProject(true)}
+        scout={{
+          scanners: raids.scanners,
+          islandCount: archipelagoState.kind === "ready" ? archipelagoState.islands.length : 0,
+          scouting: raids.scouting,
+          error: raids.error,
+          onScoutAll: () => void raids.scoutAll(),
+          disabled: seaHarnessProps?.scoutDisabled ?? false,
+        }}
       />
       {showNewProject && (
         <NewProjectPanel

@@ -73,4 +73,13 @@ describe("ChartHud", () => {
     fireEvent.click(screen.getByRole("button", { name: "Found a new island" }));
     expect(props.onNewProject).toHaveBeenCalled();
   });
+  it("puts Scout for threats in the round-button column, not the search slip", () => {
+    hud(world, {
+      searchOpen: true,
+      scout: { scanners: null, islandCount: 8, scouting: null, error: null, onScoutAll: vi.fn(), disabled: false },
+    });
+    const scout = screen.getByRole("button", { name: "Scout for threats" });
+    expect(scout.closest(".chart-column--hud")).not.toBeNull();
+    expect(scout.closest(".chart-slip")).toBeNull();
+  });
 });

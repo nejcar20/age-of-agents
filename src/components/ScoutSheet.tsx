@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { RaidScanners } from "../useRaids";
 
@@ -61,7 +62,8 @@ export function ScoutSheet({
           )}
         </ul>
         <p className="sheet__lede">
-          Checks {islandCount} islands' dependencies against public advisory databases. This uses the network.
+          Checks {islandCount} {islandCount === 1 ? "island's" : "islands'"} dependencies against public advisory
+          databases. This uses the network.
         </p>
         {disabled && <p className="sheet__error">{SCOUT_PREVIEW_NOTE}</p>}
         <div className="sheet__actions">
@@ -82,4 +84,85 @@ export function ScoutSheet({
  * said how many islands yet — no "/0", which would read as "nothing to do". */
 export function scoutProgressLabel(scouting: { done: number; total: number }): string {
   return scouting.total > 0 ? `Scouting ${scouting.done}/${scouting.total}…` : "Scouting…";
+}
+
+/** How long a scout error stays up before getting out of the way. */
+const SCOUT_ERROR_MS = 6000;
+
+export type ScoutControlProps = {
+  scanners: RaidScanners | null;
+  islandCount: number;
+  /** `useRaids().scouting` — while set, progress shows beside the button. */
+  scouting: { done: number; total: number } | null;
+  error: string | null;
+  onScoutAll: () => void;
+  /** The browser preview: the sheet still opens, Scout does not. */
+  disabled: boolean;
+};
+
+/**
+ * The HUD's round "Scout for threats" button, its confirm sheet, and a
+ * small note beside it for progress or a failure. Lives in the chart's
+ * button column rather than the search slip: the slip grows leftward from
+ * the right edge, and a wider slip covered the title banner.
+ */
+export function ScoutControl({ scanners, islandCount, scouting, error, onScoutAll, disabled }: ScoutControlProps) {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // A scout error ("already scouting", a scanner crash) is shown, then
+  // cleared after a while — and shown again whenever a new one arrives.
+  const [shownError, setShownError] = useState<string | null>(error);
+  useEffect(() => {
+    setShownError(error);
+    if (error === null) return;
+    const timer = setTimeout(() => setShownError(null), SCOUT_ERROR_MS);
+    return () => clearTimeout(timer);
+  }, [error]);
+
+  return (
+    <div className="chart-scout">
+      <button
+        type="button"
+        className="chart-round"
+        aria-label={SCOUT_SHEET_TITLE}
+        title={SCOUT_SHEET_TITLE}
+        aria-pressed={scouting !== null}
+        // One scout at a time: while one runs, its progress is the answer.
+        disabled={scouting !== null}
+        onClick={() => setSheetOpen(true)}
+      >
+        {/* A spyglass, drawn in the same 24-unit, 2.2-stroke hand as the
+            column's other glyphs. */}
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3.5 13.5l11-6.5 2.5 4.3-11 6.5z" />
+          <path d="M17 7.6l2.6-1.5 1.6 2.8-2.6 1.5" />
+          <path d="M10 15.5l-2.5 5M10 15.5l3 4.5" />
+        </svg>
+      </button>
+      {scouting !== null ? (
+        <span className="chart-scout__note" role="status">
+          {scoutProgressLabel(scouting)}
+        </span>
+      ) : (
+        shownError !== null && (
+          <span className="chart-scout__note chart-scout__note--error" role="alert">
+            {shownError}
+          </span>
+        )
+      )}
+      {sheetOpen && (
+        <ScoutSheet
+          scanners={scanners}
+          islandCount={islandCount}
+          disabled={disabled}
+          onClose={() => setSheetOpen(false)}
+          onConfirm={() => {
+            // Closing first is what makes this fire once: the sheet (and
+            // its button) is gone before a second click can land.
+            setSheetOpen(false);
+            onScoutAll();
+          }}
+        />
+      )}
+    </div>
+  );
 }

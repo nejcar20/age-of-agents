@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
-import { Html } from "@react-three/drei";
+import { Html, useCursor } from "@react-three/drei";
 import * as THREE from "three";
 import { hashString } from "../city";
 import {
@@ -129,20 +129,21 @@ function buildShipParts(): { hull: THREE.BufferGeometry; mast: THREE.BufferGeome
 
 type Parts = ReturnType<typeof buildShipParts>;
 
-function ShipModel({ parts, cls, sail }: { parts: Parts; cls: ShipClass; sail: string }) {
+function ShipModel({ parts, cls, sail, opacity }: { parts: Parts; cls: ShipClass; sail: string; opacity: number }) {
+  const fade = { transparent: opacity < 1, opacity };
   const masts = cls.masts === 2 ? [-0.2, 0.18] : [0];
   return (
     <>
       <mesh geometry={parts.hull} position={[0, 0.05, 0]} castShadow>
-        <meshStandardMaterial color={HULL} roughness={0.85} flatShading />
+        <meshStandardMaterial color={HULL} roughness={0.85} flatShading {...fade} />
       </mesh>
       {masts.map((z) => (
         <group key={z} position={[0, 0, z]}>
           <mesh geometry={parts.mast} position={[0, 0.55, 0]}>
-            <meshStandardMaterial color={MAST} roughness={0.9} />
+            <meshStandardMaterial color={MAST} roughness={0.9} {...fade} />
           </mesh>
           <mesh geometry={parts.sail} position={[0, 0.05, 0.03]} castShadow>
-            <meshStandardMaterial color={sail} roughness={0.9} side={THREE.DoubleSide} />
+            <meshStandardMaterial color={sail} roughness={0.9} side={THREE.DoubleSide} {...fade} />
           </mesh>
         </group>
       ))}
@@ -164,6 +165,7 @@ export function PirateShips({
   previous,
   waterY,
   onClick,
+  opacity = 1,
 }: {
   /** The island's centre and land size, in world units (`islandCenter`/
    * `landRect`). Ships are drawn in world space, outside the island's own
@@ -179,6 +181,9 @@ export function PirateShips({
   previous: RaidReport | undefined;
   waterY: number;
   onClick: (root: string) => void;
+  /** The island's own filter-dim opacity (`Archipelago`'s `DIM_OPACITY`
+   * when an active filter is hiding it, else 1): its raid recedes with it. */
+  opacity?: number;
 }) {
   const parts = useDisposableMemo(buildShipParts, []);
   const puff = useDisposableMemo(() => new THREE.IcosahedronGeometry(1, 0), []);
@@ -268,6 +273,17 @@ export function PirateShips({
     });
   });
 
+  // Ships are clickable, so they say so — the same pointer the DOM's
+  // buttons show. One flag for the whole fleet: only one can be under the
+  // cursor at a time.
+  const [hovered, setHovered] = useState(false);
+  useCursor(hovered);
+  const handleOver = useCallback((event: ThreeEvent<PointerEvent>) => {
+    event.stopPropagation();
+    setHovered(true);
+  }, []);
+  const handleOut = useCallback(() => setHovered(false), []);
+
   const handleClick = useCallback(
     (event: ThreeEvent<MouseEvent>) => {
       event.stopPropagation();
@@ -294,8 +310,10 @@ export function PirateShips({
           rotation={initial[i].rotation}
           scale={route.size}
           onClick={handleClick}
+          onPointerOver={handleOver}
+          onPointerOut={handleOut}
         >
-          <ShipModel parts={parts} cls={cls} sail={sailColor(finding.severity, stale)} />
+          <ShipModel parts={parts} cls={cls} sail={sailColor(finding.severity, stale)} opacity={opacity} />
         </group>
       ))}
       {sinking.map((s, i) => (
@@ -308,7 +326,7 @@ export function PirateShips({
           scale={s.route.size}
           raycast={() => {}}
         >
-          <ShipModel parts={parts} cls={s.cls} sail={sailColor(s.finding.severity, false)} />
+          <ShipModel parts={parts} cls={s.cls} sail={sailColor(s.finding.severity, false)} opacity={opacity} />
         </group>
       ))}
       {smoke && puff && (
@@ -322,7 +340,7 @@ export function PirateShips({
               }}
               raycast={() => {}}
             >
-              <meshStandardMaterial color="#5e5853" transparent opacity={0.32} depthWrite={false} roughness={1} flatShading />
+              <meshStandardMaterial color="#5e5853" transparent opacity={0.32 * opacity} depthWrite={false} roughness={1} flatShading />
             </mesh>
           ))}
         </group>
@@ -333,16 +351,16 @@ export function PirateShips({
         <group name="raid-flag" position={[cx + landW * 0.12, 0.1, cz + landD * 0.26]}>
           <mesh position={[0, flagPole / 2, 0]} castShadow raycast={() => {}}>
             <cylinderGeometry args={[0.08, 0.08, flagPole, 6]} />
-            <meshStandardMaterial color="#5a4030" roughness={0.9} />
+            <meshStandardMaterial color="#5a4030" roughness={0.9} transparent={opacity < 1} opacity={opacity} />
           </mesh>
           <mesh position={[0.8, flagPole - 0.55, 0]} castShadow raycast={() => {}}>
             <planeGeometry args={[1.5, 1]} />
-            <meshStandardMaterial color="#fbf8f0" roughness={0.9} side={THREE.DoubleSide} />
+            <meshStandardMaterial color="#fbf8f0" roughness={0.9} side={THREE.DoubleSide} transparent={opacity < 1} opacity={opacity} />
           </mesh>
         </group>
       )}
       {overflow > 0 && (
-        <Html position={[cx + landW * 0.55, 2.4, cz - landD * 0.5]} center style={{ pointerEvents: "none" }} zIndexRange={[10, 0]}>
+        <Html position={[cx + landW * 0.55, 2.4, cz - landD * 0.5]} center style={{ pointerEvents: "none", opacity }} zIndexRange={[10, 0]}>
           <div className="raid-badge" title={`${overflow} more ${overflow === 1 ? "finding" : "findings"}`}>
             +{overflow}
           </div>

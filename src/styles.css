@@ -458,15 +458,6 @@ body {
   font-size: 12px; padding: 5px 8px; border-radius: var(--radius-sm); cursor: pointer;
 }
 .sea-search__count { color: var(--ink-soft); white-space: nowrap; }
-/* Raids: the scout action sits in the same bar as the "Under attack"
-   filter it feeds. While a scout runs the button becomes its progress. */
-.sea-search__scout {
-  background: var(--sand-soft); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
-  font-size: 12px; padding: 5px 10px; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap;
-}
-.sea-search__scout:hover { background: var(--sand); }
-.sea-search__scouting { color: var(--ink-soft); white-space: nowrap; font-style: italic; }
-.sea-search__scout-error { color: var(--gold-strong); white-space: nowrap; }
 .scout-sheet__scanners { list-style: none; margin: 0 0 12px; padding: 0; font-size: 13px; line-height: 1.7; }
 .scout-sheet__missing { color: var(--ink-soft); }
 .scout-sheet__scanners code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -1138,8 +1129,20 @@ body {
 
 .chart-column { position: absolute; right: 22px; display: flex; flex-direction: column; gap: 12px; z-index: 3; }
 .chart-column--hud { top: 22px; }
-/* The scene's own buttons continue the same column below the HUD's four. */
-.chart-column--scene { top: 294px; }
+/* The scene's own buttons continue the same column below the HUD's five
+   (search, list, mood, record, scout): 22 + 5 x (54 + 12) + 8. */
+.chart-column--scene { top: 360px; }
+/* Raids: the scout button, with its progress or error as a small parchment
+   note to its LEFT — out of the column's way and clear of the search slip,
+   which only opens beside the search button above it. */
+.chart-scout { position: relative; }
+.chart-scout .chart-round:disabled { cursor: default; transform: none; }
+.chart-scout__note {
+  position: absolute; right: 66px; top: 50%; transform: translateY(-50%); white-space: nowrap;
+  padding: 5px 10px; border-radius: 10px; background: var(--chart-paper); border: 2px solid var(--chart-edge);
+  color: var(--chart-ink); font: 600 12px var(--chart-display); box-shadow: 0 3px 0 var(--chart-base);
+}
+.chart-scout__note--error { color: #a3361f; }
 .chart-round {
   position: relative; width: 54px; height: 54px; border-radius: 50%;
   border: 2px solid var(--chart-edge); background: var(--chart-paper); color: var(--chart-ink);
@@ -1233,8 +1236,6 @@ body {
 .chart-slip .sea-search__state { background-color: var(--chart-paper-light); border: 1.5px solid #d9bd83; color: var(--chart-ink); }
 .chart-slip .sea-search__input::placeholder { color: var(--chart-ink-soft); }
 .chart-slip .sea-search__count { color: var(--chart-ink-soft); }
-.chart-slip .sea-search__scout { background-color: var(--chart-paper-light); border: 1.5px solid #d9bd83; color: var(--chart-ink); }
-.chart-slip .sea-search__scouting { color: var(--chart-ink-soft); }
 /* The workspace shell styles every <button>; these keep the chart's own
    lettering on its buttons. */
 .chart-hud .chart-found { font: 600 18px var(--chart-display); }

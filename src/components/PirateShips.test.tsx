@@ -6,7 +6,7 @@
 // r3f root (`useThree`), so it is stood in for by a plain `<div>` — which is
 // what lets "is the +3 badge there" be asked of the markup at all.
 import { describe, expect, it, vi } from "vitest";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Finding, RaidReport, Severity } from "../raids";
 
@@ -23,7 +23,12 @@ vi.mock("@react-three/fiber", async (importOriginal) => {
   };
 });
 vi.mock("@react-three/drei", () => ({
-  Html: ({ children }: { children: ReactNode }) => <div data-html="">{children}</div>,
+  Html: ({ children, style }: { children: ReactNode; style?: CSSProperties }) => (
+    <div data-html="" style={style}>
+      {children}
+    </div>
+  ),
+  useCursor: () => {},
 }));
 
 const { PirateShips } = await import("./PirateShips");
@@ -58,9 +63,9 @@ const SEVERITIES: Severity[] = ["critical", "high", "high", "high", "moderate", 
 const raided = (stale = false) =>
   report({ stale, status: { kind: "raided", findings: SEVERITIES.map((s, i) => finding(i, s)) } });
 
-function render(r: RaidReport | undefined) {
+function render(r: RaidReport | undefined, opacity?: number) {
   return renderToStaticMarkup(
-    <PirateShips cx={0} cz={0} landW={20} landD={16} root="/r" report={r} previous={undefined} waterY={-0.5} onClick={() => {}} />,
+    <PirateShips cx={0} cz={0} landW={20} landD={16} root="/r" report={r} previous={undefined} waterY={-0.5} onClick={() => {}} opacity={opacity} />,
   );
 }
 
@@ -89,6 +94,15 @@ describe("PirateShips", () => {
   it("draws nothing for an unscouted or missing report", () => {
     expect(render(undefined)).toBe("");
     expect(render(report({ status: { kind: "unscouted", reason: "no lockfile" } }))).toBe("");
+  });
+
+  it("recedes with its island when a filter dims it", () => {
+    expect(render(raided())).not.toContain('opacity="0.5"');
+    const dimmed = render(raided(), 0.5);
+    // Every hull, mast and sail material, and the "+N" badge.
+    expect(count(dimmed, 'opacity="0.5"')).toBeGreaterThanOrEqual(6 * 3);
+    expect(dimmed).toContain("opacity:0.5");
+    expect(render(report(), 0.5)).toContain('opacity="0.5"'); // the flag
   });
 
   it("never forces the render loop awake", () => {

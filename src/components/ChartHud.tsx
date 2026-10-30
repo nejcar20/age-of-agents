@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { MOOD_LABEL, nextMood, useMood } from "../mood";
 import { useRecording, useRecordingToggle } from "../recording";
 import type { Agent, Island } from "../world";
+import { ScoutControl, type ScoutControlProps } from "./ScoutSheet";
 
 /**
  * The world view's interface, in the "cartographer" direction: parchment
@@ -31,6 +32,7 @@ export function ChartHud({
   listOpen,
   onToggleList,
   onNewProject,
+  scout,
 }: {
   islands: Island[];
   /** Every island on the chart, settled or not. */
@@ -48,6 +50,8 @@ export function ChartHud({
   listOpen: boolean;
   onToggleList: () => void;
   onNewProject: () => void;
+  /** Raids: the "Scout for threats" button, last in the column. */
+  scout?: ScoutControlProps;
 }) {
   const waiting: Waiting[] = islands.flatMap((island) =>
     island.agents.filter((agent) => agent.attention === "stopped").map((agent) => ({ agent, island })),
@@ -78,6 +82,7 @@ export function ChartHud({
         </RoundButton>
         <MoodRoundButton />
         <RecordRoundButton />
+        {scout && <ScoutControl {...scout} />}
       </div>
 
       {searchOpen && <div className="chart-slip chart-slip--search">{search}</div>}

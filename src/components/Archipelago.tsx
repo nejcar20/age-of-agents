@@ -2246,6 +2246,9 @@ export function Archipelago({
               if (!report) return null;
               const land = landRect(seaIsland.view);
               const center = islandCenter(seaIsland.view);
+              // Recede with its island when a filter hides it — the same
+              // test and the same opacity `SeaIslandGroup` gets below.
+              const dimmed = filterActive && !isSeaIslandMatch(seaIsland, searchQuery, stateFilter, raids);
               return (
                 <PirateShips
                   key={root}
@@ -2258,6 +2261,7 @@ export function Archipelago({
                   previous={previousRaids?.get(root)}
                   waterY={-GROUND_THICKNESS - 0.03}
                   onClick={handleRaidClick}
+                  opacity={dimmed ? DIM_OPACITY : 1}
                 />
               );
             })}
