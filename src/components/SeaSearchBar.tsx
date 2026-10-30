@@ -25,11 +25,12 @@ const STATE_OPTIONS: { value: StateFilter; label: string }[] = [
  * name at all. Two vocabularies here is the honest answer, so this one says
  * why rather than looking like the copy that got missed.
  */
-const FILTER_LABEL: Record<Attention, string> = {
+const FILTER_LABEL: Record<Attention | "under_attack", string> = {
   stopped: "needing you",
   working: "working",
   unknown: "unclear",
   quiet: "idle",
+  under_attack: "under attack",
 };
 
 /**

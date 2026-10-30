@@ -322,6 +322,21 @@ const HARNESS_HANDLERS: Record<string, (args?: Record<string, unknown>) => Promi
       default_agent: "claude",
     };
   },
+  // Raids: served from `fixtures/raids.json` so `useRaids` runs unchanged in
+  // the harness. Scouting is a no-op — a static shot never re-scans, and no
+  // `raid-report` event can fire (see `transformCallback` below).
+  raid_reports: async () => {
+    const response = await fetch("/fixtures/raids.json");
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return response.json();
+  },
+  raid_scanners: async () => ({ osv: true, npm: true }),
+  scout_all: async () => 0,
+  scout_island: async (args) => {
+    const response = await fetch("/fixtures/raids.json");
+    const reports: { root: string }[] = await response.json();
+    return reports.find((r) => r.root === args?.root) ?? null;
+  },
   get_archipelago: async () => {
     const data = await loadHarnessFixture();
     return { islands: data.archipelago };

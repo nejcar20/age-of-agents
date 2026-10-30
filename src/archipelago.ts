@@ -12,6 +12,7 @@
  */
 
 import { hashString, worldUnits } from "./city";
+import { isUnderAttack, type RaidReport } from "./raids";
 import type { Agent, Attention, Island } from "./world";
 
 // ---------------------------------------------------------------------
@@ -424,8 +425,10 @@ export function islandCenter(view: IslandView): Vec2 {
 /** `"all"` (no state narrowing) or one specific live `Attention` — the
  * options a state-filter control offers. Never a `Set`/array of states: the
  * brief's own headline case is "show me only what needs me," a single,
- * specific choice, not an arbitrary combination. */
-export type StateFilter = "all" | Attention;
+ * specific choice, not an arbitrary combination. `"under_attack"` is not an
+ * attention state at all: it comes from raid reports (any finding, stale
+ * included), so it is matched via the separate `underAttack` argument. */
+export type StateFilter = "all" | Attention | "under_attack";
 
 /**
  * Case-insensitive substring match on an island's own NAME — the identity
@@ -448,15 +451,28 @@ export function matchesSearchQuery(name: string, query: string): boolean {
  * specific state filter (there is no live state to match), the same way it
  * never gets a fabricated `"quiet"` anywhere else in this codebase.
  */
-export function matchesStateFilter(attention: Attention | null, filter: StateFilter): boolean {
+export function matchesStateFilter(
+  attention: Attention | null,
+  filter: StateFilter,
+  underAttack = false,
+): boolean {
   if (filter === "all") return true;
+  if (filter === "under_attack") return underAttack;
   return attention === filter;
 }
 
 /** Both filters combined — an island must pass the name query AND the state
  * filter to count as a match. */
-export function isSeaIslandMatch(seaIsland: SeaIsland, query: string, filter: StateFilter): boolean {
-  return matchesSearchQuery(seaIsland.view.name, query) && matchesStateFilter(seaIsland.attention, filter);
+export function isSeaIslandMatch(
+  seaIsland: SeaIsland,
+  query: string,
+  filter: StateFilter,
+  raids?: ReadonlyMap<string, RaidReport>,
+): boolean {
+  return (
+    matchesSearchQuery(seaIsland.view.name, query) &&
+    matchesStateFilter(seaIsland.attention, filter, isUnderAttack(raids?.get(seaIsland.view.root)))
+  );
 }
 
 /**
@@ -487,10 +503,13 @@ export function findBestSeaIslandMatch(
   seaIslands: SeaIsland[],
   query: string,
   filter: StateFilter,
+  raids?: ReadonlyMap<string, RaidReport>,
 ): SeaIsland | null {
   const q = query.trim().toLowerCase();
   if (q === "") return null;
-  const candidates = seaIslands.filter((s) => matchesStateFilter(s.attention, filter));
+  const candidates = seaIslands.filter((s) =>
+    matchesStateFilter(s.attention, filter, isUnderAttack(raids?.get(s.view.root))),
+  );
   const exact = candidates.find((s) => s.view.name.toLowerCase() === q);
   if (exact) return exact;
   const prefix = candidates.find((s) => s.view.name.toLowerCase().startsWith(q));
