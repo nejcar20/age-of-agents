@@ -16,8 +16,8 @@ pub struct BoundedOutput {
     pub truncated: bool,
 }
 
-/// Pipe readers retain at most limit + 1 bytes. The caller owns and reaps the
-/// child, including on timeout. Waiting for pipe completion shares the same
+/// Pipe readers retain at most limit + 1 bytes. The child is always reaped
+/// here, on every exit path including a timeout or a read error. Waiting for pipe completion shares the same
 /// deadline, so an inherited pipe can never extend the command's time budget.
 pub fn run_bounded(
     mut command: Command,
@@ -124,7 +124,6 @@ pub fn executable_file(path: &Path) -> bool {
     true
 }
 
-
 /// The first `name` on PATH, then in the places installers put it. The
 /// fallbacks matter more than they look: an app opened from Finder inherits
 /// a minimal PATH with no Homebrew directories, so `brew install herdr` —
@@ -150,7 +149,6 @@ pub fn find_executable(
         .map(|directory| directory.join(name))
         .find(|candidate| is_executable(candidate))
 }
-
 
 /// `find_executable` against the real PATH and home directory.
 pub fn resolve_executable(name: &str) -> Option<PathBuf> {
