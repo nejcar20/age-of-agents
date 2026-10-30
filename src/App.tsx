@@ -28,6 +28,7 @@ import { cityStats, type CityView } from "./city";
 import { jumpMessage } from "./jump";
 import { formatLastChanged } from "./lastChanged";
 import { useArchipelago } from "./useArchipelago";
+import { useRaids } from "./useRaids";
 import { useHotkey } from "./useHotkey";
 import { useWindowFocused } from "./useWindowFocused";
 import { useWorld } from "./useWorld";
@@ -108,10 +109,15 @@ function AtlasAppInner({
      * its panel (facts, prompt box, last output) without opening a
      * terminal over it. Unused by the shipped app. */
     autoSelectFirstVillager?: boolean;
+    /** Screenshot-harness-only: the browser preview has no scanners and
+     * nothing real to scan, so the scout sheet opens but cannot start.
+     * Unused by the shipped app. */
+    scoutDisabled?: boolean;
   };
 } = {}) {
   const world = useWorld();
   const archipelagoState = useArchipelago();
+  const raids = useRaids();
   // Art-direction round, item 2: the coordinator's explicit authorization
   // for continuous rendering (the moving water/sky) is conditional — "while
   // the window is focused, paused when blurred/hidden." One hook call here,
@@ -226,7 +232,7 @@ function AtlasAppInner({
   // state is "we don't know yet."
   const matchCount =
     filterActive && archipelagoState.kind === "ready"
-      ? seaIslands.filter((s) => isSeaIslandMatch(s, searchQuery, stateFilter)).length
+      ? seaIslands.filter((s) => isSeaIslandMatch(s, searchQuery, stateFilter, raids.reports)).length
       : undefined;
 
   // Item 2 (search-and-filter round): "typing a name and pressing Enter
@@ -235,7 +241,7 @@ function AtlasAppInner({
   // island" implementation — so a search-triggered jump looks and behaves
   // exactly like a Space-triggered one.
   const submitSearch = useCallback(() => {
-    const match = findBestSeaIslandMatch(seaIslands, searchQuery, stateFilter);
+    const match = findBestSeaIslandMatch(seaIslands, searchQuery, stateFilter, raids.reports);
     if (match) {
       // I1 (Opus frontend review): `match` IS the exact island — carry its
       // `root` through rather than discarding it and forcing `Archipelago`
@@ -249,7 +255,18 @@ function AtlasAppInner({
       // component already reports through.
       setNote({ text: `no island matches "${searchQuery.trim()}"`, seq: ++seq.current });
     }
-  }, [seaIslands, searchQuery, stateFilter]);
+  }, [seaIslands, searchQuery, stateFilter, raids.reports]);
+
+  // Raids: a pirate ship was clicked. Until the raid panel exists this goes
+  // to the island it is attacking, through the same flight-then-panel path
+  // as a search jump — a single place to swap for the raid panel later.
+  const handleRaidClick = useCallback(
+    (root: string) => {
+      const island = seaIslands.find((s) => s.view.root === root);
+      if (island) setFlyToRequest({ islandName: island.view.name, islandRoot: root, seq: ++flySeq.current });
+    },
+    [seaIslands],
+  );
 
   // Game-feel round: factored out of the Space hotkey below so the SAME code
   // path also fires from `WhoNeedsMe`'s own click — "make that feel like a
@@ -434,6 +451,9 @@ function AtlasAppInner({
               flyToRequest={flyToRequest}
               searchQuery={searchQuery}
               stateFilter={stateFilter}
+              raids={raids.reports}
+              previousRaids={raids.previous}
+              onRaidClick={handleRaidClick}
               frameloop={windowFocused ? "always" : "demand"}
               {...seaHarnessProps}
             />
@@ -455,9 +475,19 @@ function AtlasAppInner({
             onStateFilterChange={setStateFilter}
             onSubmit={submitSearch}
             matchCount={matchCount}
+            scout={{
+              scanners: raids.scanners,
+              islandCount: archipelagoState.kind === "ready" ? archipelagoState.islands.length : 0,
+              scouting: raids.scouting,
+              error: raids.error,
+              onScoutAll: () => void raids.scoutAll(),
+              disabled: seaHarnessProps?.scoutDisabled ?? false,
+            }}
           />
         }
-        searchOpen={searchOpen || searchQuery.trim() !== "" || stateFilter !== "all"}
+        // A running scout keeps the slip open — that is where its progress
+        // is shown.
+        searchOpen={searchOpen || searchQuery.trim() !== "" || stateFilter !== "all" || raids.scouting !== null}
         onToggleSearch={() => setSearchOpen((open) => !open)}
         listOpen={showPanel}
         onToggleList={() => setShowPanel((v) => !v)}

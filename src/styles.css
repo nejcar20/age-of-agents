@@ -458,6 +458,25 @@ body {
   font-size: 12px; padding: 5px 8px; border-radius: var(--radius-sm); cursor: pointer;
 }
 .sea-search__count { color: var(--ink-soft); white-space: nowrap; }
+/* Raids: the scout action sits in the same bar as the "Under attack"
+   filter it feeds. While a scout runs the button becomes its progress. */
+.sea-search__scout {
+  background: var(--sand-soft); border: 1px solid var(--sand-border); color: var(--ink); font: inherit;
+  font-size: 12px; padding: 5px 10px; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap;
+}
+.sea-search__scout:hover { background: var(--sand); }
+.sea-search__scouting { color: var(--ink-soft); white-space: nowrap; font-style: italic; }
+.sea-search__scout-error { color: var(--gold-strong); white-space: nowrap; }
+.scout-sheet__scanners { list-style: none; margin: 0 0 12px; padding: 0; font-size: 13px; line-height: 1.7; }
+.scout-sheet__missing { color: var(--ink-soft); }
+.scout-sheet__scanners code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+/* "+N more ships than drawn" beside a raided island. Small and dark, like
+   the hulls it counts — never brighter than the attention cues. */
+.raid-badge {
+  background: rgba(43, 36, 32, 0.88); color: #f3ead8; border: 1px solid #6b4a30;
+  font: 700 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 2px 6px; border-radius: 999px; white-space: nowrap;
+}
 
 /* The sea's own "reset view" (mirrors `TownView`'s, one level up — see
    `Archipelago.tsx`'s `resetView`). Top-right, clear of the HUD (top-left/
@@ -1214,6 +1233,8 @@ body {
 .chart-slip .sea-search__state { background-color: var(--chart-paper-light); border: 1.5px solid #d9bd83; color: var(--chart-ink); }
 .chart-slip .sea-search__input::placeholder { color: var(--chart-ink-soft); }
 .chart-slip .sea-search__count { color: var(--chart-ink-soft); }
+.chart-slip .sea-search__scout { background-color: var(--chart-paper-light); border: 1.5px solid #d9bd83; color: var(--chart-ink); }
+.chart-slip .sea-search__scouting { color: var(--chart-ink-soft); }
 /* The workspace shell styles every <button>; these keep the chart's own
    lettering on its buttons. */
 .chart-hud .chart-found { font: 600 18px var(--chart-display); }

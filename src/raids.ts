@@ -39,6 +39,17 @@ export type RaidReport = {
 /** Ceiling on ships drawn per island; the rest become an "+N more" count. */
 export const MAX_SHIPS = 6;
 
+/** Sail colour per severity, shared by the ships at sea and the raiders in
+ * town so one severity reads as one colour everywhere. "unknown" sails as
+ * moderate: we were told something is wrong, not how badly. */
+export const SEVERITY_COLOR: Record<Severity, string> = {
+  critical: "#1b1b1b",
+  high: "#c8432f",
+  moderate: "#e0a43a",
+  unknown: "#e0a43a",
+  low: "#e9e2cf",
+};
+
 /** Worst first — the order ships are drawn and groups are ranked in. */
 const SEVERITY_RANK: Record<Severity, number> = {
   critical: 0,

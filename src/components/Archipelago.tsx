@@ -53,6 +53,8 @@ import { useRecording } from "../recording";
 import { useMood } from "../mood";
 import { CinematicEffects } from "./CinematicEffects";
 import { SailingBoats, type BoatRoute } from "./Boats";
+import { PirateShips } from "./PirateShips";
+import type { RaidReport } from "../raids";
 
 export { buildAttentionHaloGeometry };
 import { Vegetation } from "./Vegetation";
@@ -167,6 +169,15 @@ export type ArchipelagoProps = {
    * into "show me ONLY what needs me." Combined with `searchQuery` via AND
    * (`isSeaIslandMatch`). */
   stateFilter?: StateFilter;
+  /** Raids: the latest scout report per island root (`useRaids().reports`).
+   * Drawn as pirate ships, a smoke column or a white flag, and consulted by
+   * the "under_attack" state filter. Absent = nothing scouted yet. */
+  raids?: ReadonlyMap<string, RaidReport>;
+  /** Raids: the report each one in `raids` replaced (`useRaids().previous`),
+   * so ships fixed by a re-scout can sink instead of vanishing. */
+  previousRaids?: ReadonlyMap<string, RaidReport>;
+  /** Raids: a pirate ship was clicked; the island's root. */
+  onRaidClick?: (root: string) => void;
 };
 
 // Same amber/blue/grey the 2D `IslandGrid`/`styles.css` already use for
@@ -1721,6 +1732,9 @@ export function Archipelago({
   autoVillagerClickPaneId,
   searchQuery = "",
   stateFilter = "all",
+  raids,
+  previousRaids,
+  onRaidClick,
 }: ArchipelagoProps) {
   const tradeRoutes = useTradeRoutes();
   const seaIslands = useMemo(() => joinArchipelago(archipelago, islands), [archipelago, islands]);
@@ -1972,6 +1986,16 @@ export function Archipelago({
     [onOpenIsland],
   );
 
+  // Raids: a ship click goes to the caller when it asked for it, otherwise
+  // to the island it is attacking — the panel that explains its raid.
+  const handleRaidClick = useCallback(
+    (root: string) => {
+      if (onRaidClick) onRaidClick(root);
+      else setSelectedRoot(root);
+    },
+    [onRaidClick],
+  );
+
   const handleIslandSelect = useCallback((seaIsland: SeaIsland) => {
     setSelectedRoot(seaIsland.view.root);
   }, []);
@@ -2211,8 +2235,34 @@ export function Archipelago({
           <Sea bounds={outerBounds} />
           <SailingBoats routes={seaBoatRoutes} waterY={-GROUND_THICKNESS - 0.03} />
           <TradeRouteLines islands={archipelago} />
+          {/* Raids: drawn in world space beside (never inside) each island's
+              own group, so they cannot move it or touch its attention cues.
+              Islands with no report draw nothing — "unscouted" is the
+              default, not a state to decorate. */}
+          {raids &&
+            seaIslands.map((seaIsland) => {
+              const root = seaIsland.view.root;
+              const report = raids.get(root);
+              if (!report) return null;
+              const land = landRect(seaIsland.view);
+              const center = islandCenter(seaIsland.view);
+              return (
+                <PirateShips
+                  key={root}
+                  cx={center.x}
+                  cz={center.z}
+                  landW={land.w}
+                  landD={land.d}
+                  root={root}
+                  report={report}
+                  previous={previousRaids?.get(root)}
+                  waterY={-GROUND_THICKNESS - 0.03}
+                  onClick={handleRaidClick}
+                />
+              );
+            })}
           {seaIslands.map((seaIsland) => {
-            const matches = filterActive && isSeaIslandMatch(seaIsland, searchQuery, stateFilter);
+            const matches = filterActive && isSeaIslandMatch(seaIsland, searchQuery, stateFilter, raids);
             return (
               <SeaIslandGroup
                 key={seaIsland.view.root}

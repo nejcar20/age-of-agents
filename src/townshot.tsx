@@ -41,6 +41,7 @@ import { buildTradePrompt, TRADE_ROUTES_KEY, type TradeRoute } from "./tradeRout
 import type { CityView } from "./city";
 import type { IslandView, StateFilter } from "./archipelago";
 import type { World } from "./world";
+import type { RaidReport } from "./raids";
 // The same stylesheet the shipped app loads (via `App.tsx`) — this round
 // added several DOM overlay panels (`IslandPanel`, `BuildingPanel`'s reveal
 // button, `DistrictPanel`, the various `.sheet`s) that are absolutely
@@ -515,6 +516,17 @@ function ArchipelagoHarness({
   const [state, setState] = React.useState<
     { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; data: ArchipelagoFixture }
   >({ kind: "loading" });
+  // Raids: the same `fixtures/raids.json` the `raid_reports` handler serves
+  // `?app=1` through `useRaids`, passed straight in here since this mode
+  // renders `<Archipelago>` without `App`. A missing file just means a sea
+  // with no raids drawn, never a broken harness.
+  const [raids, setRaids] = React.useState<Map<string, RaidReport>>(() => new Map());
+  React.useEffect(() => {
+    fetch("/fixtures/raids.json")
+      .then((response) => (response.ok ? (response.json() as Promise<RaidReport[]>) : []))
+      .then((list) => setRaids(new Map(list.map((r) => [r.root, r]))))
+      .catch(() => {});
+  }, []);
 
   React.useEffect(() => {
     fetch(`/fixtures/${fixture}.json`)
@@ -547,6 +559,7 @@ function ArchipelagoHarness({
         autoExpandPaneId={expandPaneId}
         searchQuery={searchQuery}
         stateFilter={stateFilter}
+        raids={raids}
       />
     </div>
   );
@@ -636,7 +649,7 @@ function Root() {
   // you": `?scene=archipelago` alone never rendered `.sea-hud` at all, so a
   // layout bug from the header/HUD interacting with the sea below it had no
   // way to show up in a `?scene=archipelago` screenshot.
-  if (params.get("workspace") === "1") return <TradeRouteStorageContext.Provider value={params.get("routes") === "1" ? previewRouteStorage : null}><Workbench renderAtlas={() => <AtlasApp seaHarnessProps={{ autoOpenIslandRoot: params.get("openIslandRoot") ?? undefined, autoTownTerminalPaneId: params.get("townTerminalPaneId") ?? undefined, autoMood: (["day", "golden", "night"] as const).find((m) => m === params.get("mood")) }} />} initialView={params.get("view") === "world" ? "world" : "work"} /><div style={{ position: "fixed", bottom: 8, right: 12, zIndex: 100, pointerEvents: "none", font: "10px system-ui", color: "#dce8eb", background: "#263d4b", border: "1px solid #627d8c", borderRadius: 4, padding: "3px 7px" }}>Preview · sample data</div></TradeRouteStorageContext.Provider>;
+  if (params.get("workspace") === "1") return <TradeRouteStorageContext.Provider value={params.get("routes") === "1" ? previewRouteStorage : null}><Workbench renderAtlas={() => <AtlasApp seaHarnessProps={{ scoutDisabled: true, autoOpenIslandRoot: params.get("openIslandRoot") ?? undefined, autoTownTerminalPaneId: params.get("townTerminalPaneId") ?? undefined, autoMood: (["day", "golden", "night"] as const).find((m) => m === params.get("mood")) }} />} initialView={params.get("view") === "world" ? "world" : "work"} /><div style={{ position: "fixed", bottom: 8, right: 12, zIndex: 100, pointerEvents: "none", font: "10px system-ui", color: "#dce8eb", background: "#263d4b", border: "1px solid #627d8c", borderRadius: 4, padding: "3px 7px" }}>Preview · sample data</div></TradeRouteStorageContext.Provider>;
   if (params.get("app") === "1") {
     return (
       <App
@@ -667,6 +680,8 @@ function Root() {
           autoVillagerClickPaneId: params.get("villagerClickPaneId") ?? undefined,
           autoRecording: params.get("recording") === "1",
           autoMood: (["day", "golden", "night"] as const).find((m) => m === params.get("mood")),
+          // Raids: nothing real to scan here; the sheet opens, Scout doesn't.
+          scoutDisabled: true,
         }}
       />
     );

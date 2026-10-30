@@ -1,6 +1,11 @@
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { StateFilter } from "../archipelago";
+import type { RaidScanners } from "../useRaids";
 import type { Attention } from "../world";
+import { ScoutSheet, SCOUT_SHEET_TITLE, scoutProgressLabel } from "./ScoutSheet";
+
+/** How long a scout error stays up before getting out of the way. */
+const SCOUT_ERROR_MS = 6000;
 
 /** Every state-filter option, in the order the `<select>` offers them —
  * "all" first (the neutral, unfiltered choice), then the same three
@@ -13,6 +18,8 @@ const STATE_OPTIONS: { value: StateFilter; label: string }[] = [
   { value: "working", label: "⚒ Working" },
   { value: "unknown", label: "? Unknown" },
   { value: "quiet", label: "· Idle" },
+  // Raids: islands with at least one known vulnerability, stale or not.
+  { value: "under_attack", label: "Under attack" },
 ];
 
 /**
@@ -66,6 +73,7 @@ export function SeaSearchBar({
   onStateFilterChange,
   onSubmit,
   matchCount,
+  scout,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
@@ -79,7 +87,31 @@ export function SeaSearchBar({
    * nothing rather than a fabricated "0 of 0". Only shown once a filter is
    * actually active (an unfiltered sea has nothing worth captioning here). */
   matchCount?: number;
+  /** Raids: the "Scout for threats" action, beside the filter it feeds
+   * ("Under attack"). Absent, the bar renders exactly as it always has. */
+  scout?: {
+    scanners: RaidScanners | null;
+    islandCount: number;
+    /** `useRaids().scouting` — while set, the button becomes progress. */
+    scouting: { done: number; total: number } | null;
+    error: string | null;
+    onScoutAll: () => void;
+    /** The browser preview: the sheet still opens, Scout does not. */
+    disabled: boolean;
+  };
 }) {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // A scout error ("already scouting", a scanner crash) is shown, then
+  // cleared after a while — but re-shown whenever a new one arrives.
+  const scoutError = scout?.error ?? null;
+  const [shownError, setShownError] = useState<string | null>(scoutError);
+  useEffect(() => {
+    setShownError(scoutError);
+    if (scoutError === null) return;
+    const timer = setTimeout(() => setShownError(null), SCOUT_ERROR_MS);
+    return () => clearTimeout(timer);
+  }, [scoutError]);
+
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -119,6 +151,35 @@ export function SeaSearchBar({
             : `${matchCount} island${matchCount === 1 ? "" : "s"} match${matchCount === 1 ? "es" : ""}`}
           {stateFilter !== "all" && query.trim() === "" ? ` (${FILTER_LABEL[stateFilter]})` : ""}
         </span>
+      )}
+      {scout &&
+        (scout.scouting ? (
+          <span className="sea-search__scouting" role="status">
+            {scoutProgressLabel(scout.scouting)}
+          </span>
+        ) : (
+          <button type="button" className="sea-search__scout" onClick={() => setSheetOpen(true)}>
+            {SCOUT_SHEET_TITLE}
+          </button>
+        ))}
+      {shownError !== null && (
+        <span className="sea-search__scout-error" role="alert">
+          {shownError}
+        </span>
+      )}
+      {scout && sheetOpen && (
+        <ScoutSheet
+          scanners={scout.scanners}
+          islandCount={scout.islandCount}
+          disabled={scout.disabled}
+          onClose={() => setSheetOpen(false)}
+          onConfirm={() => {
+            // Closing first is what makes this fire once: the sheet (and
+            // its button) is gone before a second click can land.
+            setSheetOpen(false);
+            scout.onScoutAll();
+          }}
+        />
       )}
     </div>
   );
