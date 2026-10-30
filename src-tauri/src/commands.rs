@@ -581,20 +581,30 @@ pub async fn city_for(path: String) -> Result<CityView, String> {
 /// the herdr event loop.
 #[tauri::command]
 pub async fn get_archipelago(state: tauri::State<'_, AppState>) -> Result<Archipelago, String> {
+    let (config, home, settled_roots) = archipelago_inputs(&state)?;
+    tauri::async_runtime::spawn_blocking(move || build_archipelago(&config, home, &settled_roots))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Everything `build_archipelago` needs, shared with `raids::scout::scout_all`
+/// so "known islands" means exactly the islands `get_archipelago` draws.
+///
+/// ALSO FIX IF CHEAP: `build_archipelago` used to be handed `&[]` for
+/// `settled_roots` while `list_unsettled`/`repo_history` pass the real
+/// set — two root sets silently answering the same "what should we scan"
+/// question. Gathered under the same lock-then-drop-before-`.await`
+/// discipline `repo_history` already uses.
+pub(crate) fn archipelago_inputs(
+    state: &AppState,
+) -> Result<(crate::config::Config, PathBuf, Vec<String>), String> {
     let config = state.config.clone();
     let home = dirs::home_dir().ok_or("no home directory")?;
-    // ALSO FIX IF CHEAP: `build_archipelago` used to be handed `&[]` for
-    // `settled_roots` while `list_unsettled`/`repo_history` pass the real
-    // set — two root sets silently answering the same "what should we scan"
-    // question. Gathered under the same lock-then-drop-before-`.await`
-    // discipline `repo_history` already uses.
     let settled_roots: Vec<String> = {
         let world = state.world.lock().unwrap();
         world.islands.iter().map(|island| island.root.clone()).collect()
     };
-    tauri::async_runtime::spawn_blocking(move || build_archipelago(&config, home, &settled_roots))
-        .await
-        .map_err(|e| e.to_string())
+    Ok((config, home, settled_roots))
 }
 
 /// A repository's readable transition history (see `history` module docs) —

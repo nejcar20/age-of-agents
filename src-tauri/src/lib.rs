@@ -191,7 +191,11 @@ pub fn run() {
             commands::clipboard_read_text,
             commands::clipboard_write_text,
             commands::pane_send_text,
-            commands::pane_send_keys
+            commands::pane_send_keys,
+            raids::scout::raid_scanners,
+            raids::scout::raid_reports,
+            raids::scout::scout_island,
+            raids::scout::scout_all
         ])
         .run(tauri::generate_context!())
         .expect("error while running Age of Agents");

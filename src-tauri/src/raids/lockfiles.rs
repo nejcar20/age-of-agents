@@ -92,6 +92,9 @@ pub fn is_stale(stored: &[LockfilePrint], current: &[LockfilePrint]) -> bool {
 }
 
 /// Sibling manifest of a lockfile; unknown paths come back unchanged.
+// The reference mapping: the frontend's `manifestForLockfile` mirrors it and
+// places raiders with it; no backend caller needs it yet.
+#[allow(dead_code)]
 pub fn manifest_for_lockfile(lockfile: &str) -> String {
     let (dir, name) = match lockfile.rfind('/') {
         Some(i) => (&lockfile[..=i], &lockfile[i + 1..]),

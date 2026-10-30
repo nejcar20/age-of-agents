@@ -153,7 +153,6 @@ pub fn find_executable(
 
 
 /// `find_executable` against the real PATH and home directory.
-#[allow(dead_code)] // first caller arrives with the raid scanners
 pub fn resolve_executable(name: &str) -> Option<PathBuf> {
     let home = dirs::home_dir()?;
     find_executable(
