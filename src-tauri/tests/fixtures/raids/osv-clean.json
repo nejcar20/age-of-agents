@@ -1,3 +1,18 @@
 {
-  "results": []
+  "results": [
+    {
+      "source": { "path": "/fake/repo/Cargo.lock", "type": "lockfile" },
+      "packages": [
+        {
+          "package": { "name": "serde", "version": "1.0.210", "ecosystem": "crates.io" },
+          "vulnerabilities": [],
+          "groups": []
+        },
+        {
+          "package": { "name": "smallvec", "version": "1.13.2", "ecosystem": "crates.io" }
+        }
+      ],
+      "groups": []
+    }
+  ]
 }

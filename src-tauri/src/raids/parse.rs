@@ -6,6 +6,8 @@
 // `npm audit --json --package-lock-only`. `osv-*.json` are HAND-WRITTEN from
 // the osv-scanner v2 JSON schema (osv-scanner was not installed when this
 // was written), so re-capture them from a real run when it is available.
+// `osv-clean.json` has the shape `--all-packages` produces: a source is listed
+// even when none of its packages has a vulnerability.
 
 use std::path::Path;
 
@@ -302,8 +304,21 @@ mod tests {
 
     #[test]
     fn osv_clean_and_empty_results() {
-        assert_eq!(parse_osv(OSV_CLEAN, root()).unwrap(), (vec![], vec![]));
+        assert_eq!(
+            parse_osv(br#"{"results": []}"#, root()).unwrap(),
+            (vec![], vec![])
+        );
         assert!(parse_osv(br#"{}"#, root()).is_err());
+    }
+
+    #[test]
+    fn osv_source_without_vulnerabilities_still_counts_as_covered() {
+        // Coverage is what lets a clean lockfile be Clean rather than "not
+        // checked", so a listed source counts even with zero findings.
+        assert_eq!(
+            parse_osv(OSV_CLEAN, root()).unwrap(),
+            (vec![], vec!["Cargo.lock".to_string()])
+        );
     }
 
     #[test]

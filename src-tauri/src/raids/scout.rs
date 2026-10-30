@@ -95,8 +95,19 @@ fn scan_osv(
 ) -> Scan {
     let mut command = Command::new(osv);
     // osv-scanner v2 syntax; v1 spelled this `--format json -r <root>`.
+    // `--all-packages` (v1: `--experimental-all-packages`) makes the JSON list
+    // every source it read, not only those with vulnerabilities; without it a
+    // clean lockfile is indistinguishable from an unread one and Clean could
+    // never be reached.
     command
-        .args(["scan", "source", "--format", "json", "--recursive"])
+        .args([
+            "scan",
+            "source",
+            "--format",
+            "json",
+            "--all-packages",
+            "--recursive",
+        ])
         .arg(root);
     match run_scanner(command, &[0, 1, 128], run) {
         // 128 is "no packages found": a successful run that read nothing, so
@@ -247,8 +258,13 @@ fn save_report_to(path: &Path, report: &RaidReport) {
     crate::cache_io::with_cache_lock(path, || {
         let mut reports = load_reports_from(path);
         reports.insert(report.root.clone(), report.clone());
-        if let Ok(json) = serde_json::to_vec(&reports) {
-            let _ = crate::cache_io::atomic_write(path, &json);
+        // Logged, not returned: the scan itself succeeded and its report is
+        // still emitted; only remembering it across restarts failed.
+        let saved = serde_json::to_vec(&reports)
+            .map_err(|e| e.to_string())
+            .and_then(|json| crate::cache_io::atomic_write(path, &json).map_err(|e| e.to_string()));
+        if let Err(e) = saved {
+            eprintln!("raids: failed to save the report for {}: {e}", report.root);
         }
     });
 }
@@ -273,6 +289,12 @@ fn with_freshness(mut report: RaidReport) -> RaidReport {
     report
 }
 
+fn sorted_with_freshness(reports: HashMap<String, RaidReport>) -> Vec<RaidReport> {
+    let mut out: Vec<RaidReport> = reports.into_values().map(with_freshness).collect();
+    out.sort_by(|a, b| a.root.cmp(&b.root));
+    out
+}
+
 #[derive(serde::Serialize)]
 pub struct ScannersView {
     pub osv: bool,
@@ -289,14 +311,13 @@ pub async fn raid_scanners() -> ScannersView {
 }
 
 /// Every remembered report, with `stale` recomputed from the lockfiles on
-/// disk now. Off the async runtime: it lists files in every scouted repo.
+/// disk now, sorted by root so the order never depends on `HashMap`
+/// iteration. Off the async runtime: it lists files in every scouted repo.
 #[tauri::command]
 pub async fn raid_reports() -> Result<Vec<RaidReport>, String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        load_reports().into_values().map(with_freshness).collect()
-    })
-    .await
-    .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(|| sorted_with_freshness(load_reports()))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -336,6 +357,16 @@ impl Drop for ScoutingGuard {
     }
 }
 
+/// Emits `raid-scout-done` when dropped, so the frontend's "Scouting d/N"
+/// state is cleared on every exit path, including a panicking scan.
+struct DoneSignal(AppHandle);
+
+impl Drop for DoneSignal {
+    fn drop(&mut self) {
+        let _ = self.0.emit("raid-scout-done", ());
+    }
+}
+
 /// Scouts every island `get_archipelago` draws, in the background, and
 /// returns how many there are right away; ships arrive per island through
 /// `raid-report` events, then one `raid-scout-done`.
@@ -355,6 +386,9 @@ pub async fn scout_all(app: AppHandle, state: State<'_, AppState>) -> Result<usi
     let count = roots.len();
 
     tauri::async_runtime::spawn_blocking(move || {
+        // Declared before the guard so it drops after it: the flag is clear
+        // by the time the frontend hears "done" and may scout again.
+        let _done = DoneSignal(app.clone());
         let _guard = guard;
         let queue = Mutex::new(VecDeque::from(roots));
         let scanners = detect_scanners();
@@ -371,7 +405,6 @@ pub async fn scout_all(app: AppHandle, state: State<'_, AppState>) -> Result<usi
                 });
             }
         });
-        let _ = app.emit("raid-scout-done", ());
     });
     Ok(count)
 }
@@ -385,6 +418,7 @@ mod tests {
     use tempfile::TempDir;
 
     const OSV_VULN: &str = include_str!("../../tests/fixtures/raids/osv-vulnerable.json");
+    const OSV_CLEAN: &str = include_str!("../../tests/fixtures/raids/osv-clean.json");
     const NPM_VULN: &[u8] = include_bytes!("../../tests/fixtures/raids/npm-audit-vulnerable.json");
 
     /// A git repo holding `lockfiles`, plus its canonical root — the same
@@ -466,8 +500,8 @@ mod tests {
         let report = scout_root(&root, &osv_only(), 42, &run);
 
         assert_eq!(
-            seen.borrow()[0][..4],
-            ["scan", "source", "--format", "json"]
+            seen.borrow()[0][..5],
+            ["scan", "source", "--format", "json", "--all-packages"]
         );
         assert_eq!(report.scanner.as_deref(), Some("osv-scanner"));
         assert_eq!(report.scanned_at, 42);
@@ -483,6 +517,17 @@ mod tests {
         };
         assert_eq!(findings[0].severity, Severity::Critical);
         assert_eq!(findings[0].lockfile, "package-lock.json");
+    }
+
+    #[test]
+    fn osv_exit_0_all_clean_is_clean() {
+        let (_dir, root) = repository(&["Cargo.lock"]);
+        let body = OSV_CLEAN.replace("/fake/repo", &root.to_string_lossy());
+        let run = |_: Command| Ok(output(0, body.as_bytes(), "", false));
+        let report = scout_root(&root, &osv_only(), 1, &run);
+        assert_eq!(report.covered, ["Cargo.lock"]);
+        assert!(report.uncovered.is_empty());
+        assert_eq!(report.status, RaidStatus::Clean);
     }
 
     #[test]
@@ -670,5 +715,16 @@ mod tests {
         });
         assert!(panicked.is_err());
         assert!(ScoutingGuard::acquire().is_some());
+    }
+
+    #[test]
+    fn reports_come_back_sorted_by_root() {
+        let reports =
+            HashMap::from(["/c", "/a", "/b"].map(|root| (root.to_string(), report_for(root))));
+        let roots: Vec<String> = sorted_with_freshness(reports)
+            .into_iter()
+            .map(|r| r.root)
+            .collect();
+        assert_eq!(roots, ["/a", "/b", "/c"]);
     }
 }
