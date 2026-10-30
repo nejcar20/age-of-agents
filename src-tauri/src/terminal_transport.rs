@@ -666,52 +666,17 @@ fn valid_base64(encoded: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/'))
 }
 
-fn executable_file(path: &Path) -> bool {
-    let Ok(metadata) = path.metadata() else {
-        return false;
-    };
-    if !metadata.is_file() {
-        return false;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if metadata.permissions().mode() & 0o111 == 0 {
-            return false;
-        }
-    }
-    true
-}
-
 fn resolve_executable(home: &Path) -> Result<PathBuf, String> {
-    find_herdr(std::env::var_os("PATH").as_deref(), home, &executable_file).ok_or_else(|| {
+    crate::process::find_executable(
+        "herdr",
+        std::env::var_os("PATH").as_deref(),
+        home,
+        &crate::process::executable_file,
+    )
+    .ok_or_else(|| {
         "Herdr executable was not found in PATH, ~/.local/bin, /opt/homebrew/bin or /usr/local/bin"
             .into()
     })
-}
-
-/// The first `herdr` on PATH, then in the places installers put it. The
-/// fallbacks matter more than they look: an app opened from Finder inherits
-/// a minimal PATH with no Homebrew directories, so `brew install herdr` —
-/// the documented install — was never found outside a terminal launch.
-fn find_herdr(
-    path: Option<&std::ffi::OsStr>,
-    home: &Path,
-    is_executable: &dyn Fn(&Path) -> bool,
-) -> Option<PathBuf> {
-    let on_path = path
-        .into_iter()
-        .flat_map(std::env::split_paths)
-        .filter(|directory| directory.is_absolute());
-    let fallbacks = [
-        home.join(".local/bin"),
-        PathBuf::from("/opt/homebrew/bin"),
-        PathBuf::from("/usr/local/bin"),
-    ];
-    on_path
-        .chain(fallbacks)
-        .map(|directory| directory.join("herdr"))
-        .find(|candidate| is_executable(candidate))
 }
 
 /// Read-only: whether Herdr is installed somewhere this app can run it, so
@@ -854,29 +819,6 @@ pub async fn terminal_detach(
 mod tests {
     use super::*;
 
-    #[test]
-    fn finds_herdr_on_path_first_then_where_installers_put_it() {
-        let home = Path::new("/Users/you");
-        let at = |found: &'static [&'static str]| move |p: &Path| found.iter().any(|f| p == Path::new(f));
-        let path = std::ffi::OsString::from("/usr/bin:relative/bin:/custom/bin");
-        assert_eq!(
-            find_herdr(Some(&path), home, &at(&["/custom/bin/herdr", "/opt/homebrew/bin/herdr"])),
-            Some(PathBuf::from("/custom/bin/herdr")),
-        );
-        // A Finder launch: PATH has no Homebrew, but brew installed it there.
-        let finder = std::ffi::OsString::from("/usr/bin:/bin:/usr/sbin:/sbin");
-        assert_eq!(
-            find_herdr(Some(&finder), home, &at(&["/opt/homebrew/bin/herdr"])),
-            Some(PathBuf::from("/opt/homebrew/bin/herdr")),
-        );
-        assert_eq!(
-            find_herdr(None, home, &at(&["/Users/you/.local/bin/herdr", "/usr/local/bin/herdr"])),
-            Some(PathBuf::from("/Users/you/.local/bin/herdr")),
-        );
-        // Relative PATH entries are never trusted.
-        assert_eq!(find_herdr(Some(&path), home, &at(&["relative/bin/herdr"])), None);
-        assert_eq!(find_herdr(Some(&finder), home, &at(&[])), None);
-    }
     use serde_json::{json, Value};
     use std::path::{Path, PathBuf};
     use std::sync::{mpsc, Arc};

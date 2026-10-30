@@ -6,6 +6,7 @@ mod herdr;
 mod history;
 mod inspection;
 mod platform;
+mod process;
 mod transitions;
 mod terminal_transport;
 mod world;

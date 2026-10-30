@@ -5,10 +5,8 @@ use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
-use std::sync::mpsc;
+use std::process::Command;
 use std::sync::Arc;
-use std::thread;
 use std::time::{Duration, Instant};
 
 const MAX_FILE_BYTES: usize = 256 * 1024;
@@ -159,103 +157,6 @@ pub async fn inspect_project_path(root: String, path: String) -> Result<FileInsp
     })
     .await
     .map_err(|error| error.to_string())?
-}
-
-struct BoundedOutput {
-    status: ExitStatus,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-    truncated: bool,
-}
-
-/// Pipe readers retain at most limit + 1 bytes. The caller owns and reaps the
-/// child, including on timeout. Waiting for pipe completion shares the same
-/// deadline, so an inherited pipe can never extend the command's time budget.
-fn run_bounded(
-    mut command: Command,
-    limit: usize,
-    deadline: Instant,
-) -> Result<BoundedOutput, String> {
-    if Instant::now() >= deadline {
-        return Err("Git inspection timed out".into());
-    }
-    let mut child = command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| format!("Could not start Git: {error}"))?;
-    let stdout = child.stdout.take().ok_or("Git stdout unavailable")?;
-    let stderr = child.stderr.take().ok_or("Git stderr unavailable")?;
-    let (sender, receiver) = mpsc::channel();
-    let stdout_sender = sender.clone();
-    thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let result = stdout.take(limit as u64 + 1).read_to_end(&mut bytes);
-        let _ = stdout_sender.send((true, result.map(|_| bytes)));
-    });
-    thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let result = stderr.take(16 * 1024 + 1).read_to_end(&mut bytes);
-        let _ = sender.send((false, result.map(|_| bytes)));
-    });
-    let mut out = None;
-    let mut err = None;
-    let mut status = None;
-    loop {
-        while let Ok((is_stdout, result)) = receiver.try_recv() {
-            let bytes = match result {
-                Ok(bytes) => bytes,
-                Err(error) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(format!("Could not read Git output: {error}"));
-                }
-            };
-            if is_stdout {
-                out = Some(bytes);
-            } else {
-                err = Some(bytes);
-            }
-        }
-        if status.is_none() {
-            match child.try_wait() {
-                Ok(result) => status = result,
-                Err(error) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(format!("Could not wait for Git: {error}"));
-                }
-            }
-        }
-        if status.is_some() && out.is_some() && err.is_some() {
-            let mut stdout = out.unwrap();
-            let truncated = stdout.len() > limit;
-            stdout.truncate(limit);
-            return Ok(BoundedOutput {
-                status: status.unwrap(),
-                stdout,
-                stderr: err.unwrap(),
-                truncated,
-            });
-        }
-        // A reader stops at its cap and closes the pipe; kill promptly instead
-        // of spending the remaining budget producing output we cannot display.
-        let capped = out.as_ref().is_some_and(|bytes| bytes.len() > limit)
-            || err.as_ref().is_some_and(|bytes| bytes.len() > 16 * 1024);
-        if capped && status.is_none() {
-            let _ = child.kill();
-            status = child.wait().ok();
-        }
-        if Instant::now() >= deadline {
-            if status.is_none() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-            return Err("Git inspection timed out".into());
-        }
-        thread::sleep(Duration::from_millis(5));
-    }
 }
 
 struct Repository {
@@ -528,10 +429,10 @@ impl Repository {
         command
     }
 
-    fn git(&self, args: &[&str], limit: usize) -> Result<BoundedOutput, String> {
+    fn git(&self, args: &[&str], limit: usize) -> Result<crate::process::BoundedOutput, String> {
         let mut command = self.command();
         command.args(args);
-        let output = run_bounded(command, limit, self.deadline)?;
+        let output = crate::process::run_bounded(command, limit, self.deadline, "Git")?;
         if !output.status.success() && !output.truncated {
             return Err(format!(
                 "Git inspection failed: {}",
@@ -865,6 +766,8 @@ mod tests {
     use super::*;
     use std::fs;
     use std::process::Command;
+    use std::sync::mpsc;
+    use std::thread;
     use tempfile::TempDir;
 
     fn git(root: &Path, args: &[&str]) {
@@ -1435,16 +1338,6 @@ mod tests {
     }
 
     #[test]
-    fn command_deadline_bounds_a_slow_process() {
-        let mut command = Command::new("sleep");
-        command.arg("2");
-        let start = Instant::now();
-        let result = run_bounded(command, 64, start + Duration::from_millis(30));
-        assert!(result.err().unwrap().contains("timed out"));
-        assert!(start.elapsed() < Duration::from_secs(1));
-    }
-
-    #[test]
     fn never_runs_external_diff_textconv_or_fsmonitor() {
         let dir = repository();
         fs::write(dir.path().join("file.txt"), "before\n").unwrap();
@@ -1566,7 +1459,7 @@ mod tests {
             "--",
             "file.txt",
         ]);
-        let output = run_bounded(command, MAX_DIFF_BYTES, repo.deadline).unwrap();
+        let output = crate::process::run_bounded(command, MAX_DIFF_BYTES, repo.deadline, "Git").unwrap();
         assert!(!output.status.success());
         assert!(String::from_utf8_lossy(&output.stderr).contains("transport 'ext' not allowed"));
         assert!(!root.join("promisor-helper.invoked").exists());
