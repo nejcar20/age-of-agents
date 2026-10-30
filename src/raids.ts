@@ -3,8 +3,11 @@
  * attackers on its island. Mirrors `src-tauri`'s raid module's `Serialize`d
  * structs field-for-field (no case conversion on this wire, same discipline
  * as `archipelago.ts`). DOM/WebGL-free so every drawing decision is unit
- * testable before any scene code exists.
+ * testable before any scene code exists. (`three`'s `Color` below is plain
+ * colour math, no renderer: it is here so the stale mix happens in the same
+ * colour space the scenes light in.)
  */
+import { Color } from "three";
 
 export type Severity = "critical" | "high" | "moderate" | "low" | "unknown";
 
@@ -49,6 +52,18 @@ export const SEVERITY_COLOR: Record<Severity, string> = {
   unknown: "#e0a43a",
   low: "#e9e2cf",
 };
+
+/** Stale colours are mixed this far toward grey: still there (the finding
+ * was real when scanned), visibly no longer current. */
+const STALE_GREY = new Color("#9a9a9a");
+const STALE_MIX = 0.6;
+
+/** A severity's colour as drawn — a ship's sail at sea, a raider in town —
+ * greyed when the report is stale. One function so the two never drift. */
+export function raidColor(severity: Severity, stale: boolean): string {
+  if (!stale) return SEVERITY_COLOR[severity];
+  return "#" + new Color(SEVERITY_COLOR[severity]).lerp(STALE_GREY, STALE_MIX).getHexString();
+}
 
 /** Worst first — the order ships are drawn and groups are ranked in. */
 const SEVERITY_RANK: Record<Severity, number> = {

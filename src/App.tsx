@@ -29,6 +29,7 @@ import { jumpMessage } from "./jump";
 import { formatLastChanged } from "./lastChanged";
 import { useArchipelago } from "./useArchipelago";
 import { useRaids } from "./useRaids";
+import type { RaidReport } from "./raids";
 import { useHotkey } from "./useHotkey";
 import { useWindowFocused } from "./useWindowFocused";
 import { useWorld } from "./useWorld";
@@ -340,6 +341,10 @@ function AtlasAppInner({
         onClose={() => setOpenIsland(null)}
         autoTerminalPaneId={seaHarnessProps?.autoTownTerminalPaneId}
         autoSelectFirstVillager={seaHarnessProps?.autoSelectFirstVillager}
+        // The same report the sea's ships are drawn from, and the same
+        // handler a ship click uses (Task 9 swaps in the raid panel).
+        raids={raids.reports.get(openIsland.root)}
+        onRaidersClick={() => handleRaidClick(openIsland.root)}
       />
     );
   }
@@ -670,6 +675,8 @@ export function TownScreen({
   onClose,
   autoTerminalPaneId,
   autoSelectFirstVillager,
+  raids,
+  onRaidersClick,
 }: {
   island: Island;
   /**
@@ -686,6 +693,10 @@ export function TownScreen({
   autoTerminalPaneId?: string;
   /** Screenshot-harness-only — see `App`'s own `autoSelectFirstVillager`. */
   autoSelectFirstVillager?: boolean;
+  /** This island's raid report, from `App`'s one `useRaids()` — never a
+   * second subscription here. */
+  raids?: RaidReport;
+  onRaidersClick?: () => void;
 }) {
   const [state, setState] = useState<CityFetchState>({ kind: "loading" });
   // Same focus-gated continuous-render authorization as the sea (see
@@ -921,6 +932,8 @@ export function TownScreen({
                 )}
                 keyboardCaptured={attached !== null}
                 autoSelectFirstVillager={autoSelectFirstVillager}
+                raids={raids}
+                onRaidersClick={onRaidersClick}
                 // THE PERFORMANCE FIX, carried across (87c03a6/195a558): a
                 // full-screen terminal over this town narrows the already
                 // focus-gated frameloop to "demand", exactly as it does

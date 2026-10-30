@@ -12,8 +12,10 @@ import {
   RoadNetwork,
   skyDomeRadius,
   TownVegetation,
+  townRaiders,
 } from "./TownView";
 import type { CityLayout, CityModel } from "../city";
+import type { RaidReport } from "../raids";
 
 // The bug from the author's screenshot: a hover tooltip rendered clipped at
 // the very bottom edge of the window. `clampTooltipPosition` is the pure fix
@@ -291,5 +293,89 @@ describe("isometricDepthRange", () => {
     const { near, far } = isometricDepthRange(town);
     expect(far - near).toBeLessThan(2000);
     expect(far).toBeGreaterThan(town.cameraDistance + skyDomeRadius(town.sceneDiagonal));
+  });
+});
+
+// Raids in town: `townRaiders` is the pure half of where raiders stand —
+// which manifests anchor to which building, and on which free ground —
+// tested without a Canvas, like `buildKindBuckets` above.
+describe("townRaiders", () => {
+  const model: CityModel = {
+    root: "/p/repo",
+    name: "repo",
+    skipped: 0,
+    submodules: 0,
+    districts: [
+      {
+        path: "/p/repo",
+        name: "repo",
+        walled: false,
+        depth: 0,
+        buildings: [
+          { path: "/p/repo/package.json", name: "package.json", kind: "Config", lines: 40, height: 2 },
+          { path: "/p/repo/README.md", name: "README.md", kind: "Docs", lines: 40, height: 2 },
+        ],
+      },
+    ],
+  };
+  // A 6x5 plot whose perimeter is road; buildings sit one cell in.
+  const roads: [number, number][] = [];
+  for (let x = 0; x < 6; x++) roads.push([x, 0], [x, 4]);
+  for (let z = 1; z < 4; z++) roads.push([0, z], [5, z]);
+  const layout: CityLayout = {
+    width: 6,
+    depth: 5,
+    grid_pitch: 1,
+    districts: [
+      {
+        district_index: 0,
+        plot: { x: 0, z: 0, w: 6, d: 5 },
+        road_edges: roads,
+        buildings: [
+          { building_index: 0, x: 1, z: 2, height: 2 },
+          { building_index: 1, x: 2, z: 2, height: 2 },
+        ],
+      },
+    ],
+  };
+  const buckets = buildKindBuckets(model, layout, 1);
+  const raids = (lockfiles: string[]): RaidReport => ({
+    root: "/p/repo",
+    scanned_at: 0,
+    scanner: "osv-scanner",
+    covered: lockfiles,
+    uncovered: [],
+    status: {
+      kind: "raided",
+      findings: lockfiles.map((lockfile, i) => ({
+        id: `GHSA-${i}`, summary: "s", severity: "high", package: `p${i}`,
+        installed: "1", fixed_in: "2", lockfile, url: "https://osv.dev",
+      })),
+    },
+    stale: false,
+  });
+
+  it("town_without_raids_prop_renders_as_before", () => {
+    // No report (every caller that predates raids), or nothing to draw:
+    // no raider scene at all, so the town renders exactly what it did.
+    expect(townRaiders(model, layout, buckets, undefined)).toBeNull();
+    expect(townRaiders(model, layout, buckets, { ...raids([]), status: { kind: "clean" } })).toBeNull();
+  });
+
+  it("anchors a lockfile to its manifest building by root-relative path", () => {
+    const scene = townRaiders(model, layout, buckets, raids(["package-lock.json", "web/yarn.lock"]))!;
+    expect(scene.groups.map((g) => [g.manifest, g.anchorPath])).toEqual([
+      ["package.json", "package.json"],
+      ["web/package.json", null],
+    ]);
+    const stand = scene.positions.get("package.json")!;
+    // package.json sits at cell (1,2), nearest the town's west edge: its
+    // raiders stand on the road west of it — on the south-west corner,
+    // since straight west (0.5, 2.5) is behind the house from the camera
+    // (which looks from +x/+z) — and never on a building.
+    expect(stand.x).toBeCloseTo(0.5);
+    expect(stand.z).toBeCloseTo(4.5);
+    // The coast point is outside the town's own ground.
+    expect(scene.coast.x < 0 || scene.coast.x > 6 || scene.coast.z < 0 || scene.coast.z > 5).toBe(true);
   });
 });

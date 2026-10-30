@@ -1,0 +1,103 @@
+[
+  {
+    "root": "/Users/jernejjankocica/Projects/AgeOfAgents",
+    "scanned_at": 1761800000,
+    "scanner": "osv-scanner",
+    "covered": [
+      "package-lock.json",
+      "src-tauri/Cargo.lock",
+      "site/yarn.lock"
+    ],
+    "uncovered": [],
+    "fingerprint": [
+      {
+        "path": "package-lock.json",
+        "hash": "0000000000000000"
+      },
+      {
+        "path": "src-tauri/Cargo.lock",
+        "hash": "0000000000000000"
+      },
+      {
+        "path": "site/yarn.lock",
+        "hash": "0000000000000000"
+      }
+    ],
+    "status": {
+      "kind": "raided",
+      "findings": [
+        {
+          "id": "GHSA-town-0001",
+          "summary": "Prototype pollution in lodash",
+          "severity": "critical",
+          "package": "lodash",
+          "installed": "1.0.0",
+          "fixed_in": "1.0.1",
+          "lockfile": "package-lock.json",
+          "url": "https://osv.dev/vulnerability/GHSA-town-0001"
+        },
+        {
+          "id": "GHSA-town-0002",
+          "summary": "ReDoS in minimatch",
+          "severity": "high",
+          "package": "minimatch",
+          "installed": "1.0.0",
+          "fixed_in": "1.0.1",
+          "lockfile": "package-lock.json",
+          "url": "https://osv.dev/vulnerability/GHSA-town-0002"
+        },
+        {
+          "id": "GHSA-town-0003",
+          "summary": "SSRF in axios",
+          "severity": "moderate",
+          "package": "axios",
+          "installed": "1.0.0",
+          "fixed_in": "1.0.1",
+          "lockfile": "package-lock.json",
+          "url": "https://osv.dev/vulnerability/GHSA-town-0003"
+        },
+        {
+          "id": "GHSA-town-0004",
+          "summary": "Data race in tokio",
+          "severity": "high",
+          "package": "tokio",
+          "installed": "1.0.0",
+          "fixed_in": "1.0.1",
+          "lockfile": "src-tauri/Cargo.lock",
+          "url": "https://osv.dev/vulnerability/GHSA-town-0004"
+        },
+        {
+          "id": "GHSA-town-0005",
+          "summary": "Unsound localtime in time",
+          "severity": "low",
+          "package": "time",
+          "installed": "1.0.0",
+          "fixed_in": "1.0.1",
+          "lockfile": "src-tauri/Cargo.lock",
+          "url": "https://osv.dev/vulnerability/GHSA-town-0005"
+        },
+        {
+          "id": "GHSA-town-0006",
+          "summary": "XSS in marked",
+          "severity": "moderate",
+          "package": "marked",
+          "installed": "1.0.0",
+          "fixed_in": "1.0.1",
+          "lockfile": "site/yarn.lock",
+          "url": "https://osv.dev/vulnerability/GHSA-town-0006"
+        },
+        {
+          "id": "GHSA-town-0007",
+          "summary": "ReDoS in debug",
+          "severity": "low",
+          "package": "debug",
+          "installed": "1.0.0",
+          "fixed_in": "1.0.1",
+          "lockfile": "site/yarn.lock",
+          "url": "https://osv.dev/vulnerability/GHSA-town-0007"
+        }
+      ]
+    },
+    "stale": false
+  }
+]

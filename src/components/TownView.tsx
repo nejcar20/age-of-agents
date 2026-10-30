@@ -12,11 +12,13 @@ import { buildSafeGroundGeometry } from "./terrainGeometry";
 import { OpenWater, SUN_OFFSET, TownShallows } from "./Water";
 import { useDisposableMemo } from "./useDisposableMemo";
 import { buildAttentionHaloGeometry } from "./attentionHalo";
-import { buildTownCoastGeometry, coastExtent, coastHeight, coastSwell, coastT as coastTAt, coastWaterlineT, townCoastWidth } from "./townCoast";
+import { buildTownCoastGeometry, coastExtent, coastHeight, coastSwell, coastT as coastTAt, coastWaterlineT, coastWobble, townCoastWidth } from "./townCoast";
 import { useRecording } from "../recording";
 import { CinematicEffects } from "./CinematicEffects";
 import { ChimneySmoke, chimneyTop, Crane, Scaffolding, type Site } from "./Construction";
 import { SailingBoats, type BoatRoute } from "./Boats";
+import { Raiders, type RaiderStand } from "./Raiders";
+import { raiderGroups, type RaiderGroup, type RaidReport } from "../raids";
 import { useMood } from "../mood";
 import { buildingFacadeTexture, buildingWindowMask } from "./facadeTexture";
 import { Vegetation } from "./Vegetation";
@@ -141,6 +143,13 @@ export type TownViewProps = {
    * the villager panel without also opening a terminal over it). Unused by
    * the shipped app. */
   autoSelectFirstVillager?: boolean;
+  /** This island's latest raid report (`useRaids().reports`), if it has
+   * one: raiders gather at each vulnerable manifest's building. Absent —
+   * every caller that predates raids — the town draws exactly what it did. */
+  raids?: RaidReport;
+  /** Fires when a band of raiders is clicked. Like `onVillagerClick`, the
+   * caller owns what that does; this component only reports it. */
+  onRaidersClick?: () => void;
 };
 
 // Visual overhaul pass (the author rejected the previous palette outright:
@@ -461,6 +470,8 @@ export function TownView({
   changes,
   changesLive = false,
   externalInspector = false,
+  raids,
+  onRaidersClick,
 }: TownViewProps) {
   const { model, layout } = cityView;
   const recording = useRecording();
@@ -515,6 +526,8 @@ export function TownView({
   // (`BuildingHoverInfo`) a villager has none of, and this is used for
   // nothing but the cursor style, unlike `hover`'s own tooltip.
   const [villagerHovered, setVillagerHovered] = useState(false);
+  // Same for a band of raiders.
+  const [raidersHovered, setRaidersHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
@@ -559,6 +572,15 @@ export function TownView({
       smoke: chimneys.slice(0, MAX_SMOKING_CHIMNEYS).map((c) => chimneyTop(c.site)),
     };
   }, [working, kindBuckets, changes]);
+  const raiderScene = useMemo(() => townRaiders(model, layout, kindBuckets, raids), [model, layout, kindBuckets, raids]);
+  // A band that vanishes under the cursor (a re-scout came back clean)
+  // never fires its pointer-out, so the cursor would stay a pointer.
+  useEffect(() => {
+    if (!raiderScene) setRaidersHovered(false);
+  }, [raiderScene]);
+  const raidersClickRef = useRef(onRaidersClick);
+  raidersClickRef.current = onRaidersClick;
+  const handleRaidersClick = useCallback(() => raidersClickRef.current?.(), []);
   const growthSeqRef = useRef(0);
   const growthSeq = useMemo(() => (growth.deltas.length > 0 ? ++growthSeqRef.current : growthSeqRef.current), [growth]);
   const codeSelectRef = useRef(onCodeSelect);
@@ -691,7 +713,7 @@ export function TownView({
   // clickable building OR villager. Independent of `OrbitControls`, which
   // attaches its OWN native listeners straight to the canvas — this is
   // purely visual and never interferes with it.
-  const cursor = dragging ? "grabbing" : hover || villagerHovered ? "pointer" : "grab";
+  const cursor = dragging ? "grabbing" : hover || villagerHovered || raidersHovered ? "pointer" : "grab";
 
   // Town-villagers round, item 2: fires `onVillagerClick` FIRST and
   // unconditionally — the same "never gated behind an animation" rule
@@ -827,6 +849,19 @@ export function TownView({
           onSelect={handleVillagerSelect}
           onHoverChange={setVillagerHovered}
         />
+        {/* Raids: a band at each vulnerable manifest's building (or on
+            the coast) — see `Raiders.tsx` and `townRaiders` below. */}
+        {raiderScene && (
+          <Raiders
+            groups={raiderScene.groups}
+            positions={raiderScene.positions}
+            coast={raiderScene.coast}
+            stale={raids?.stale ?? false}
+            onClick={handleRaidersClick}
+            onHoverChange={setRaidersHovered}
+            gridPitch={gridPitch}
+          />
+        )}
         {/* Item 7: "objects look pasted on... add contact shadows/cheap
             ambient occlusion where things meet ground." One `ContactShadows`
             for the whole town (never per-building/per-district) — a single
@@ -2348,6 +2383,110 @@ function TownVillager({
       </group>
     </group>
   );
+}
+
+export type TownRaiderScene = {
+  groups: RaiderGroup[];
+  /** Each anchored group's stand, keyed by its root-relative `anchorPath`. */
+  positions: Map<string, RaiderStand>;
+  coast: RaiderStand;
+};
+
+/** How far across the coast (0 = the town's edge, see `coastT`) a coast
+ * band stands: on the meadow, well short of the beach. */
+const RAIDER_COAST_T = 0.28;
+
+/**
+ * Where a raid's bands stand in this town, or `null` when there is nothing
+ * to draw (no report, or no findings) — the town then renders exactly what
+ * it did before raids existed.
+ *
+ * A finding's lockfile is relative to the island's root, so buildings are
+ * matched by their root-relative path. An anchored band stands on the
+ * street cell nearest its building on the side facing the town's nearest
+ * edge ("at the walls") and in the camera's view, never a cell another
+ * band already took. Street
+ * cells come from `townVillagerSlots`, which are building-free by
+ * construction (see its doc comment), so a band can never stand inside a
+ * house. Everything else gathers on the meadow on the camera's side of the
+ * coast (+z — the camera looks from +x/+z), facing the town.
+ */
+export function townRaiders(
+  model: CityModel,
+  layout: CityLayout,
+  buckets: Record<BuildingKind, KindBucket>,
+  raids: RaidReport | undefined,
+): TownRaiderScene | null {
+  if (!raids) return null;
+  const base = model.root.replace(/\/+$/, "") + "/";
+  const byPath = new Map<string, BuildingTransform>();
+  for (const bucket of Object.values(buckets)) {
+    bucket.metas.forEach((meta, i) => {
+      if (meta.path.startsWith(base)) byPath.set(meta.path.slice(base.length), bucket.transforms[i]);
+    });
+  }
+  const groups = raiderGroups(raids, new Set(byPath.keys()));
+  if (groups.length === 0) return null;
+
+  const w = Math.max(worldUnits(layout.width), 1);
+  const d = Math.max(worldUnits(layout.depth), 1);
+  const slots = townVillagerSlots(model, layout);
+  const taken = new Set<number>();
+  const positions = new Map<string, RaiderStand>();
+  for (const group of groups) {
+    const building = group.anchorPath === null ? undefined : byPath.get(group.anchorPath);
+    if (!building || group.anchorPath === null) continue;
+    // The town edge this building is nearest, as an outward unit vector.
+    const edges: [number, number, number][] = [
+      [building.x, -1, 0],
+      [w - building.x, 1, 0],
+      [building.z, 0, -1],
+      [d - building.z, 0, 1],
+    ];
+    const [, ox, oz] = edges.reduce((best, e) => (e[0] < best[0] ? e : best));
+    let pick = -1;
+    let pickScore = Infinity;
+    // The camera looks from +x/+z, so a band on a building's -x/-z side
+    // stands behind it, hidden by the very house it is at. Prefer a free
+    // street cell that is both outward and in view; then any in view; then
+    // any free one; then any at all.
+    for (const pass of [0, 1, 2, 3]) {
+      slots.forEach((slot, i) => {
+        if (pass < 3 && taken.has(i)) return;
+        const dx = slot.x - building.x;
+        const dz = slot.z - building.z;
+        if (pass === 0 && dx * ox + dz * oz <= 0) return;
+        if (pass <= 1 && dx + dz <= 0) return;
+        const score = Math.hypot(dx, dz);
+        if (score < pickScore) {
+          pick = i;
+          pickScore = score;
+        }
+      });
+      if (pick >= 0) break;
+    }
+    if (pick < 0) continue;
+    taken.add(pick);
+    const slot = slots[pick];
+    positions.set(group.anchorPath, {
+      x: slot.x,
+      z: slot.z,
+      facing: Math.atan2(building.x - slot.x, building.z - slot.z),
+    });
+  }
+
+  const coastX = w / 2;
+  const coastZ = d + townCoastWidth(w, d) * coastWobble(Math.PI / 2) * RAIDER_COAST_T;
+  return {
+    groups,
+    positions,
+    coast: {
+      x: coastX,
+      z: coastZ,
+      y: coastHeight(RAIDER_COAST_T, GROUND_THICKNESS, coastSwell(coastX, coastZ, w, d)),
+      facing: Math.PI,
+    },
+  };
 }
 
 /** Caps so a sweeping change (a formatter over the whole repo) builds a

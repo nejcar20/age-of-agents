@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { hashString } from "../city";
 import {
   hasSmoke,
-  SEVERITY_COLOR,
+  raidColor,
   shipsFor,
   showsCleanFlag,
   sunkFindings,
@@ -35,10 +35,6 @@ import { useDisposableMemo } from "./useDisposableMemo";
 
 const HULL = "#2b2420";
 const MAST = "#3a2e26";
-/** Stale sails are mixed this far toward grey: still there (the finding was
- * real when scanned), visibly no longer current. */
-const STALE_GREY = new THREE.Color("#9a9a9a");
-const STALE_MIX = 0.6;
 const SINK_MS = 2500;
 /** Scenery boats loop at `land * 0.8` (`Archipelago`'s `seaBoatRoutes`);
  * 1.15x that keeps a pirate in its own lane, never sharing one. */
@@ -57,11 +53,6 @@ const SHIP_CLASS: Record<Severity, ShipClass> = {
   high: { scale: 1.1, speed: 1, masts: 2, lane: 1 },
   critical: { scale: 1.3, speed: 0.6, masts: 2, lane: 1.07 },
 };
-
-function sailColor(severity: Severity, stale: boolean): string {
-  if (!stale) return SEVERITY_COLOR[severity];
-  return "#" + new THREE.Color(SEVERITY_COLOR[severity]).lerp(STALE_GREY, STALE_MIX).getHexString();
-}
 
 /** One ship's loop: evenly spaced around the island by its rank, with a
  * per-island phase and direction so neighbouring islands don't move in
@@ -313,7 +304,7 @@ export function PirateShips({
           onPointerOver={handleOver}
           onPointerOut={handleOut}
         >
-          <ShipModel parts={parts} cls={cls} sail={sailColor(finding.severity, stale)} opacity={opacity} />
+          <ShipModel parts={parts} cls={cls} sail={raidColor(finding.severity, stale)} opacity={opacity} />
         </group>
       ))}
       {sinking.map((s, i) => (
@@ -326,7 +317,7 @@ export function PirateShips({
           scale={s.route.size}
           raycast={() => {}}
         >
-          <ShipModel parts={parts} cls={s.cls} sail={sailColor(s.finding.severity, false)} opacity={opacity} />
+          <ShipModel parts={parts} cls={s.cls} sail={raidColor(s.finding.severity, false)} opacity={opacity} />
         </group>
       ))}
       {smoke && puff && (

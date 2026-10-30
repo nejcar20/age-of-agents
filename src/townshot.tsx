@@ -574,6 +574,19 @@ function Harness() {
   const orbit = params.get("orbit") === "1";
   const selectBuilding = params.get("selectBuilding") === "1";
   const selectDistrict = params.get("selectDistrict") === "1";
+  // `?raids=<name>` loads `fixtures/<name>.json` (an array of raid reports,
+  // the `raid_reports` wire shape) and hands the town the one for its own
+  // root, so raiders can be checked in a bare town (e.g.
+  // `?fixture=aoa-town&raids=town-raids`). Missing or broken → no raids.
+  const raidsFixture = params.get("raids");
+  const [raids, setRaids] = React.useState<RaidReport[]>([]);
+  React.useEffect(() => {
+    if (!raidsFixture) return;
+    fetch(`/fixtures/${raidsFixture}.json`)
+      .then((response) => (response.ok ? (response.json() as Promise<RaidReport[]>) : []))
+      .then(setRaids)
+      .catch(() => setRaids([]));
+  }, [raidsFixture]);
 
   React.useEffect(() => {
     if (!fixture) {
@@ -621,6 +634,7 @@ function Harness() {
         onControlsReady={handleControlsReady}
         autoSelectFirstBuilding={selectBuilding}
         autoSelectFirstDistrict={selectDistrict}
+        raids={raids.find((r) => r.root === state.cityView.model.root)}
       />
     </div>
   );
