@@ -7,6 +7,7 @@ mod history;
 mod inspection;
 mod platform;
 mod process;
+mod raids;
 mod transitions;
 mod terminal_transport;
 mod world;
