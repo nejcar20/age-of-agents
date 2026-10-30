@@ -9,11 +9,13 @@ import {
 import { summarizeRepoHistory, useRepoHistory } from "../history";
 import { formatLastChanged } from "../lastChanged";
 import { describeMeasuredAt } from "../measuredAt";
+import { threatsSummary, type RaidReport } from "../raids";
 import { revealPath } from "../reveal";
 import { useTerminalAttachment } from "../terminalAttachment";
 import { useEscapeKey } from "../useEscapeKey";
 import { ATTENTION_LABEL, ATTENTION_MARK, type Agent } from "../world";
 import { AgentActions } from "./AgentActions";
+import { SCOUT_PREVIEW_NOTE } from "./ScoutSheet";
 import { START_AGENT_LABEL, useStartAgentFlow } from "./StartAgent";
 import { Terminal } from "./Terminal";
 
@@ -57,6 +59,11 @@ export function IslandPanel({
   autoOpenSendAgent,
   autoOpenTerminal,
   openTerminalRequest,
+  raid,
+  onShowRaid,
+  onScout,
+  scouting = false,
+  scoutDisabled = false,
 }: {
   seaIsland: SeaIsland;
   onClose: () => void;
@@ -93,6 +100,17 @@ export function IslandPanel({
    * "start an agent and land in its terminal" all use — one meaning of
    * "open this pane's terminal", not four. */
   openTerminalRequest?: { paneId: string; seq: number } | null;
+  /** Raids: this island's report, if it has ever been scouted. The
+   * "Threats" row only appears when `onShowRaid`/`onScout` are wired. */
+  raid?: RaidReport;
+  /** Opens the raid panel for this island. */
+  onShowRaid?: () => void;
+  /** Scouts this island's main root. */
+  onScout?: () => void;
+  /** This island is being scouted right now. */
+  scouting?: boolean;
+  /** The browser preview: nothing real to scout. */
+  scoutDisabled?: boolean;
 }) {
   const { view, attention, agents } = seaIsland;
   const tradeRoutes = useTradeRoutes();
@@ -363,6 +381,26 @@ export function IslandPanel({
         <dd>{formatLastChanged(view.last_changed_at)}</dd>
         <dt>Settlement</dt>
         <dd>{settled ? `${agents.length} agent${agents.length === 1 ? "" : "s"}` : "none — unsettled"}</dd>
+        {(onShowRaid || onScout) && (
+          <>
+            <dt>Threats</dt>
+            <dd>
+              {threatsSummary(raid)}
+              <div className="island-panel__threats-actions">
+                {onShowRaid && raid && (
+                  <button type="button" onClick={onShowRaid}>
+                    Show raid
+                  </button>
+                )}
+                {onScout && (
+                  <button type="button" onClick={onScout} disabled={scouting || scoutDisabled} title={scoutDisabled ? SCOUT_PREVIEW_NOTE : undefined}>
+                    {scouting ? "Scouting…" : "Scout"}
+                  </button>
+                )}
+              </div>
+            </dd>
+          </>
+        )}
         {historySummary !== null && (
           <>
             <dt>History</dt>

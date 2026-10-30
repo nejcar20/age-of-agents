@@ -176,8 +176,21 @@ export type ArchipelagoProps = {
   /** Raids: the report each one in `raids` replaced (`useRaids().previous`),
    * so ships fixed by a re-scout can sink instead of vanishing. */
   previousRaids?: ReadonlyMap<string, RaidReport>;
-  /** Raids: a pirate ship was clicked; the island's root. */
+  /** Raids: a pirate ship was clicked, or the island panel's "Show raid";
+   * the island's root. */
   onRaidClick?: (root: string) => void;
+  /** Raids: the island panel's "Scout" — scouts that one island's root.
+   * Without it the panel shows no "Threats" row. */
+  onScoutIsland?: (root: string) => void;
+  /** Raids: the islands being scouted right now. */
+  scoutingRoots?: ReadonlySet<string>;
+  /** The browser preview: nothing real to scout. */
+  scoutDisabled?: boolean;
+  /** A ONE-SHOT "open this pane's terminal" from outside the sea — the raid
+   * panel's "Open receiving terminal" after a defend. A fresh object per
+   * request (same convention as `flyToRequest`), landed through the very
+   * `attach` a villager click and the switcher use. */
+  terminalRequest?: { paneId: string; root: string; seq: number } | null;
 };
 
 // Same amber/blue/grey the 2D `IslandGrid`/`styles.css` already use for
@@ -1735,6 +1748,10 @@ export function Archipelago({
   raids,
   previousRaids,
   onRaidClick,
+  onScoutIsland,
+  scoutingRoots,
+  scoutDisabled = false,
+  terminalRequest,
 }: ArchipelagoProps) {
   const tradeRoutes = useTradeRoutes();
   const seaIslands = useMemo(() => joinArchipelago(archipelago, islands), [archipelago, islands]);
@@ -1956,6 +1973,16 @@ export function Archipelago({
     if (openTerminalRequest === null) return;
     setOpenTerminalRequest(null);
   }, [openTerminalRequest]);
+  // The outside request (see `terminalRequest`): honoured once per `seq`,
+  // so a re-render can never re-open a terminal the user has closed.
+  // Starts at the request already pending at mount: coming back from a town
+  // remounts the sea, and a request made over there is not one for here.
+  const lastTerminalSeq = useRef(terminalRequest?.seq ?? 0);
+  useEffect(() => {
+    if (!terminalRequest || terminalRequest.seq === lastTerminalSeq.current) return;
+    lastTerminalSeq.current = terminalRequest.seq;
+    attach(terminalRequest.paneId, terminalRequest.root);
+  }, [terminalRequest, attach]);
 
   // Screenshot-harness-only (see `autoSelectRoot`'s own doc comment): opens
   // the panel for that root once it actually exists in `seaIslands`, the
@@ -2332,6 +2359,11 @@ export function Archipelago({
             autoOpenSendAgent={autoOpenSendAgent}
             autoOpenTerminal={autoOpenTerminal}
             openTerminalRequest={openTerminalRequest}
+            raid={raids?.get(selectedIsland.view.root)}
+            onShowRaid={onRaidClick && (() => onRaidClick(selectedIsland.view.root))}
+            onScout={onScoutIsland && (() => onScoutIsland(selectedIsland.view.root))}
+            scouting={scoutingRoots?.has(selectedIsland.view.root) ?? false}
+            scoutDisabled={scoutDisabled}
           />
         )}
         {hover && (

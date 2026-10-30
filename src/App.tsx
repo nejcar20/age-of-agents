@@ -7,6 +7,7 @@ import { AgentActions, OPEN_TERMINAL_LABEL } from "./components/AgentActions";
 import { Archipelago } from "./components/Archipelago";
 import { IslandGrid } from "./components/IslandGrid";
 import { NewProjectPanel } from "./components/NewProjectPanel";
+import { RaidPanel } from "./components/RaidPanel";
 import { SeaSearchBar } from "./components/SeaSearchBar";
 import { START_AGENT_LABEL, useStartAgentFlow } from "./components/StartAgent";
 import { Workbench } from "./components/Workbench";
@@ -114,6 +115,10 @@ function AtlasAppInner({
      * nothing real to scan, so the scout sheet opens but cannot start.
      * Unused by the shipped app. */
     scoutDisabled?: boolean;
+    /** Screenshot-harness-only: opens the raid panel for this root once
+     * the archipelago is charted — the same state a ship click sets.
+     * Unused by the shipped app. */
+    autoRaidRoot?: string;
   };
 } = {}) {
   const world = useWorld();
@@ -258,15 +263,77 @@ function AtlasAppInner({
     }
   }, [seaIslands, searchQuery, stateFilter, raids.reports]);
 
-  // Raids: a pirate ship was clicked. Until the raid panel exists this goes
-  // to the island it is attacking, through the same flight-then-panel path
-  // as a search jump — a single place to swap for the raid panel later.
-  const handleRaidClick = useCallback(
+  // Raids: a pirate ship, a raider group in town, or the island panel's
+  // "Show raid" — all three open the one raid panel for that island. It
+  // lives here, above both screens, because both the sea and a town open it
+  // and `useRaids()` is called exactly once, here. No camera flight: the
+  // panel answers the click; flying as well would be a second, unasked move.
+  const [raidRoot, setRaidRoot] = useState<string | null>(null);
+  const handleRaidClick = useCallback((root: string) => setRaidRoot(root), []);
+  // A raid panel belongs to the screen it was opened on: entering or leaving
+  // a town closes it rather than carrying it across.
+  const openIslandRoot = openIsland?.root ?? null;
+  useEffect(() => setRaidRoot(null), [openIslandRoot]);
+  // Screenshot-harness-only: see `autoRaidRoot`. One-shot, like a click.
+  const harnessRaidRef = useRef(false);
+  useEffect(() => {
+    const root = seaHarnessProps?.autoRaidRoot;
+    if (!root || harnessRaidRef.current || !seaIslands.some((s) => s.view.root === root)) return;
+    harnessRaidRef.current = true;
+    setRaidRoot(root);
+  }, [seaHarnessProps?.autoRaidRoot, seaIslands]);
+
+  // Which islands are being scouted one at a time (the raid panel's and the
+  // island panel's "Rescout"/"Scout"). `useRaids` reports progress only for
+  // a scout-all, so the per-island pending state is tracked here, around
+  // the very `scoutIsland` call it describes.
+  const [rescouting, setRescouting] = useState<ReadonlySet<string>>(() => new Set());
+  const scoutIsland = raids.scoutIsland;
+  const scoutOne = useCallback(
     (root: string) => {
-      const island = seaIslands.find((s) => s.view.root === root);
-      if (island) setFlyToRequest({ islandName: island.view.name, islandRoot: root, seq: ++flySeq.current });
+      setRescouting((current) => new Set(current).add(root));
+      void scoutIsland(root).finally(() =>
+        setRescouting((current) => {
+          const next = new Set(current);
+          next.delete(root);
+          return next;
+        }),
+      );
     },
-    [seaIslands],
+    [scoutIsland],
+  );
+  // While a scout-all runs, every island is being scouted: its own button
+  // says so rather than starting a second scan the backend would refuse.
+  const scoutingRoots = useMemo<ReadonlySet<string>>(
+    () => (raids.scouting ? new Set(seaIslands.map((s) => s.view.root)) : rescouting),
+    [raids.scouting, seaIslands, rescouting],
+  );
+
+  // "Open receiving terminal" after a defend: a one-shot request handed to
+  // whichever screen owns terminals (the sea's island panel, or the town),
+  // landed through that screen's own `attach`. The raid panel closes first —
+  // the terminal is where the user asked to be.
+  const terminalSeq = useRef(0);
+  const [terminalRequest, setTerminalRequest] = useState<{ paneId: string; root: string; seq: number } | null>(null);
+  const openTerminalFromRaid = useCallback((target: SwitchTarget) => {
+    setRaidRoot(null);
+    setTerminalRequest({ paneId: target.agent.pane_id, root: target.root, seq: ++terminalSeq.current });
+  }, []);
+  const raidTargets = useMemo(() => switchTargets(world.islands), [world.islands]);
+  const raidIsland = raidRoot === null ? undefined : seaIslands.find((s) => s.view.root === raidRoot);
+  const raidPanel = raidIsland && (
+    <RaidPanel
+      key={raidIsland.view.root}
+      seaIsland={raidIsland}
+      report={raids.reports.get(raidIsland.view.root)}
+      onClose={() => setRaidRoot(null)}
+      onScout={() => scoutOne(raidIsland.view.root)}
+      scouting={scoutingRoots.has(raidIsland.view.root)}
+      targets={raidTargets}
+      connected={world.herdr_connected}
+      onOpenTerminal={openTerminalFromRaid}
+      previewDisabled={seaHarnessProps?.scoutDisabled ?? false}
+    />
   );
 
   // Game-feel round: factored out of the Space hotkey below so the SAME code
@@ -334,6 +401,7 @@ function AtlasAppInner({
     // terminal switcher reads — see `TownScreen`'s own doc comment for why
     // it lists every agent rather than only this repository's.
     return (
+      <>
       <TownScreen
         island={liveIslandFor(openIsland, world.islands)}
         islands={world.islands}
@@ -342,10 +410,13 @@ function AtlasAppInner({
         autoTerminalPaneId={seaHarnessProps?.autoTownTerminalPaneId}
         autoSelectFirstVillager={seaHarnessProps?.autoSelectFirstVillager}
         // The same report the sea's ships are drawn from, and the same
-        // handler a ship click uses (Task 9 swaps in the raid panel).
+        // handler a ship click uses: both open the raid panel.
         raids={raids.reports.get(openIsland.root)}
         onRaidersClick={() => handleRaidClick(openIsland.root)}
+        terminalRequest={terminalRequest}
       />
+      {raidPanel}
+      </>
     );
   }
 
@@ -459,6 +530,9 @@ function AtlasAppInner({
               raids={raids.reports}
               previousRaids={raids.previous}
               onRaidClick={handleRaidClick}
+              onScoutIsland={scoutOne}
+              scoutingRoots={scoutingRoots}
+              terminalRequest={terminalRequest}
               frameloop={windowFocused ? "always" : "demand"}
               {...seaHarnessProps}
             />
@@ -496,6 +570,7 @@ function AtlasAppInner({
           disabled: seaHarnessProps?.scoutDisabled ?? false,
         }}
       />
+      {raidPanel}
       {showNewProject && (
         <NewProjectPanel
           onClose={() => setShowNewProject(false)}
@@ -677,6 +752,7 @@ export function TownScreen({
   autoSelectFirstVillager,
   raids,
   onRaidersClick,
+  terminalRequest,
 }: {
   island: Island;
   /**
@@ -697,6 +773,9 @@ export function TownScreen({
    * second subscription here. */
   raids?: RaidReport;
   onRaidersClick?: () => void;
+  /** A ONE-SHOT "open this pane's terminal" from the raid panel, honoured
+   * once per `seq` — see `Archipelago`'s prop of the same name. */
+  terminalRequest?: { paneId: string; root: string; seq: number } | null;
 }) {
   const [state, setState] = useState<CityFetchState>({ kind: "loading" });
   // Same focus-gated continuous-render authorization as the sea (see
@@ -749,6 +828,15 @@ export function TownScreen({
   // more. Only used to decide which pane the header's own "Open terminal"
   // button lands on (whoever is waiting, else whoever is first).
   const localTargets = useMemo(() => switchTargets([island]), [island]);
+  // The raid panel's one-shot terminal request (see `terminalRequest`).
+  // Starts at whatever was already pending at mount: a request made on the
+  // sea is not one for this town.
+  const lastTerminalSeq = useRef(terminalRequest?.seq ?? 0);
+  useEffect(() => {
+    if (!terminalRequest || terminalRequest.seq === lastTerminalSeq.current) return;
+    lastTerminalSeq.current = terminalRequest.seq;
+    attach(terminalRequest.paneId, terminalRequest.root);
+  }, [terminalRequest, attach]);
 
   // Screenshot-harness-only (see `autoTerminalPaneId`): attaches once the
   // world genuinely reports that pane in THIS town — the same rule the

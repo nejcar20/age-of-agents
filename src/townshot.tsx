@@ -696,6 +696,9 @@ function Root() {
           autoMood: (["day", "golden", "night"] as const).find((m) => m === params.get("mood")),
           // Raids: nothing real to scan here; the sheet opens, Scout doesn't.
           scoutDisabled: true,
+          // Raids: `?raidRoot=` opens the raid panel for that island, the
+          // same state a ship click sets.
+          autoRaidRoot: params.get("raidRoot") ?? undefined,
         }}
       />
     );

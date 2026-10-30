@@ -977,4 +977,34 @@ describe("IslandPanel", () => {
       expect(await screen.findByRole("dialog", { name: /^Terminal:/ })).toBeTruthy();
     });
   });
+
+  describe("Threats row", () => {
+    const raided = {
+      root: "/p/pocketAlarm", scanned_at: 1, scanner: "osv-scanner", covered: [], uncovered: [], stale: false,
+      status: { kind: "raided" as const, findings: [
+        { id: "A", summary: "a", severity: "critical" as const, package: "a", installed: null, fixed_in: null, lockfile: "package-lock.json", url: "" },
+        { id: "B", summary: "b", severity: "low" as const, package: "b", installed: null, fixed_in: null, lockfile: "package-lock.json", url: "" },
+      ] },
+    };
+
+    it("summarises the raid and offers Show raid and Scout", () => {
+      invokeMock.mockResolvedValue([]);
+      const onShowRaid = vi.fn();
+      const onScout = vi.fn();
+      render(<IslandPanel seaIsland={settledIsland()} onClose={vi.fn()} onVisitTown={vi.fn()} raid={raided} onShowRaid={onShowRaid} onScout={onScout} />);
+      expect(screen.getByText("2 raiders (1 critical)")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Show raid" }));
+      fireEvent.click(screen.getByRole("button", { name: "Scout" }));
+      expect(onShowRaid).toHaveBeenCalledOnce();
+      expect(onScout).toHaveBeenCalledOnce();
+    });
+
+    it("says Scouting… and disables Scout while this island is being scouted", () => {
+      invokeMock.mockResolvedValue([]);
+      render(<IslandPanel seaIsland={settledIsland()} onClose={vi.fn()} onVisitTown={vi.fn()} onShowRaid={vi.fn()} onScout={vi.fn()} scouting />);
+      expect(screen.getByText("Not scouted yet")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Show raid" })).toBeNull();
+      expect((screen.getByRole("button", { name: "Scouting…" }) as HTMLButtonElement).disabled).toBe(true);
+    });
+  });
 });

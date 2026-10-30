@@ -8,6 +8,7 @@
  * colour space the scenes light in.)
  */
 import { Color } from "three";
+import { formatLastChanged } from "./lastChanged";
 
 export type Severity = "critical" | "high" | "moderate" | "low" | "unknown";
 
@@ -192,4 +193,25 @@ export function sunkFindings(before: RaidReport | undefined, after: RaidReport):
   if (after.stale || (after.status.kind !== "clean" && after.status.kind !== "raided")) return [];
   const still = new Set(findingsOf(after).map(findingKey));
   return findingsOf(before).filter((f) => !still.has(findingKey(f)));
+}
+
+/** The island panel's one-line "Threats" fact: "3 raiders (1 critical)",
+ * "Clean, scouted 2 days ago", the unscouted reason, or "Not scouted yet".
+ * Stale findings are still counted (see `isUnderAttack`), and say so. */
+export function threatsSummary(report: RaidReport | undefined, nowMs: number = Date.now()): string {
+  if (!report) return "Not scouted yet";
+  switch (report.status.kind) {
+    case "unscouted":
+      return report.status.reason;
+    case "clean":
+      return `Clean, scouted ${formatLastChanged(report.scanned_at, nowMs)}`;
+    case "raided": {
+      const findings = report.status.findings;
+      const worst = findings.slice().sort(bySeverity)[0]?.severity;
+      const worstCount = findings.filter((f) => f.severity === worst).length;
+      const head = `${findings.length} ${findings.length === 1 ? "raider" : "raiders"}`;
+      const detail = worst ? ` (${worstCount} ${worst})` : "";
+      return head + detail + (report.stale ? " · lockfiles changed since" : "");
+    }
+  }
 }

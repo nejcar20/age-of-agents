@@ -656,6 +656,56 @@ body {
 .island-panel__actions button:first-child:hover { background: var(--gold-strong); }
 .island-panel__actions button:disabled { opacity: .55; cursor: default; }
 
+/* Raids: the island panel's "Threats" line, and the raid panel itself — the
+   same card as `.island-panel`, drawn in its place and over it (the raid is
+   a closer look at that island, and Escape returns to it). Wider, because a
+   finding row carries an id, a summary and a version pair. */
+.island-panel__threats-actions { display: flex; gap: 6px; margin-top: 4px; }
+.island-panel__threats-actions button {
+  background: var(--sand-soft); border: 1px solid var(--sand-border); color: var(--ink); font: inherit; font-size: 11px;
+  padding: 3px 9px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.island-panel__threats-actions button:disabled { opacity: .55; cursor: default; }
+/* A column whose only scrolling part is the findings list, so a long raid
+   never pushes "Send an agent to defend" and "Rescout" out of view. */
+.raid-panel {
+  z-index: 6; width: min(420px, calc(100vw - 32px));
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.raid-panel > * { flex-shrink: 0; }
+.raid-panel > .raid-panel__findings { flex-shrink: 1; min-height: 80px; overflow-y: auto; }
+.raid-panel__eyebrow {
+  display: block; font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-faint); margin-bottom: 2px;
+}
+.raid-panel__scouted { margin: 0 0 10px; font-size: var(--text-sm); color: var(--ink-soft); }
+/* Stale is a disclosed fact, not a failure — the amber "worth a second
+   look" tone, same as an old `measured_at`. */
+.raid-panel__stale {
+  margin: 0 0 10px; padding: 7px 10px; border-radius: var(--radius-sm);
+  background: var(--sand-soft); border-left: 3px solid var(--amber); color: var(--ink); font-size: 12px;
+}
+.raid-panel__calm { margin: 0 0 12px; font-size: var(--text-md); color: var(--ink); }
+.raid-panel__unscouted { margin: 0 0 12px; padding: 10px 12px; background: var(--sand-deep); border-radius: var(--radius-sm); }
+.raid-panel__unscouted strong { display: block; margin-bottom: 4px; }
+.raid-panel__unscouted p { margin: 0; overflow-wrap: anywhere; }
+.raid-panel__findings { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; }
+.raid-panel__finding {
+  display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start;
+  padding: 7px 8px; border-radius: var(--radius-sm); background: var(--sand-soft);
+}
+.raid-panel__finding input { margin-top: 2px; }
+.raid-panel__finding-head { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
+.raid-panel__finding-head a { color: var(--blue); font-weight: 600; overflow-wrap: anywhere; }
+.raid-panel__severity { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: .06em; color: var(--ink-soft); }
+/* The sail colour of this severity; the border keeps the near-white "low"
+   sail visible on sand. */
+.raid-panel__severity i { width: 9px; height: 9px; border-radius: 50%; border: 1px solid rgba(74, 56, 38, .35); }
+.raid-panel__summary { margin: 3px 0 2px; font-size: 12px; overflow-wrap: anywhere; }
+.raid-panel__meta { margin: 0; font-size: 11px; color: var(--ink-soft); overflow-wrap: anywhere; }
+.raid-panel__meta code, .raid-panel code { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.raid-panel__uncovered { margin: 0 0 10px; font-size: 12px; color: var(--ink-soft); overflow-wrap: anywhere; }
+
 /* A labelled control row inside a `.sheet` (a kind picker, a name input, a
    directory-chosen display). */
 .sheet__field {

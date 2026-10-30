@@ -9,6 +9,7 @@ import {
   showsCleanFlag,
   shipsFor,
   sunkFindings,
+  threatsSummary,
   type Finding,
   type RaidReport,
   type Severity,
@@ -29,6 +30,16 @@ const raided = (findings: Finding[], over: Partial<RaidReport> = {}) =>
   report({ kind: "raided", findings }, over);
 
 describe("raids", () => {
+  it("threats_summary_names_count_worst_clean_and_reason", () => {
+    const now = 1_000_000_000_000;
+    const twoDaysAgo = now / 1000 - 2 * 86400;
+    expect(threatsSummary(raided([finding("a", "high"), finding("b", "critical"), finding("c", "low")]))).toBe("3 raiders (1 critical)");
+    expect(threatsSummary(raided([finding("a", "high")], { stale: true }))).toBe("1 raider (1 high) · lockfiles changed since");
+    expect(threatsSummary(report({ kind: "clean" }, { scanned_at: twoDaysAgo }), now)).toBe("Clean, scouted 2 days ago");
+    expect(threatsSummary(report({ kind: "unscouted", reason: "no lockfile" }))).toBe("no lockfile");
+    expect(threatsSummary(undefined)).toBe("Not scouted yet");
+  });
+
   it("ships_capped_at_six_highest_first_with_overflow", () => {
     const sevs: Severity[] = ["low", "moderate", "high", "unknown", "critical", "low", "high", "moderate", "low"];
     const r = raided(sevs.map((s, i) => finding(`F${i}`, s)));
