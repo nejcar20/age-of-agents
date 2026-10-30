@@ -34,10 +34,10 @@ export function DefendComposer({ root, findings, targets, connected, onClose, on
   const [paneId, setPaneId] = useState(eligible[0]?.agent.pane_id ?? "");
   const chosen = eligible.find(t => t.agent.pane_id === paneId);
   const [prompt, setPrompt] = useState(() => defendPrompt(root, findings, chosen?.agent.cwd ?? null));
-  // Which agent (and which checkout of it) the prompt was written for. The
-  // prompt names the worktree, so an agent that moved since — or a pick of
-  // another one — must not receive text written for somewhere else.
-  const [writtenFor, setWrittenFor] = useState(() => chosen ? { paneId: chosen.agent.pane_id, cwd: chosen.agent.cwd } : null);
+  // Which checkout the prompt was written for — the only thing about the
+  // receiving agent `defendPrompt` depends on (it names the worktree). Text
+  // written for one checkout must not go to an agent working in another.
+  const [writtenFor, setWrittenFor] = useState<string | null>(() => chosen?.agent.cwd ?? null);
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,14 +65,19 @@ export function DefendComposer({ root, findings, targets, connected, onClose, on
     return () => { document.removeEventListener("focusin", contain); dialog.removeEventListener("keydown", keydown); if (previous?.isConnected) previous.focus(); };
   }, []);
   useEffect(() => { (sent ? doneRef.current : promptRef.current)?.focus(); }, [sent]);
-  // Writing the prompt for an agent is always an explicit act — a pick, or
-  // "Rewrite for this agent" — never an effect that could overwrite edits.
   const writeFor = (target: SwitchTarget | undefined) => {
-    setPrompt(defendPrompt(root, findings, target?.agent.cwd ?? null));
-    setWrittenFor(target ? { paneId: target.agent.pane_id, cwd: target.agent.cwd } : null);
+    const cwd = target?.agent.cwd ?? null;
+    setPrompt(defendPrompt(root, findings, cwd));
+    setWrittenFor(cwd);
   };
-  const pick = (next: string) => { setPaneId(next); writeFor(eligible.find(t => t.agent.pane_id === next)); };
-  const current = !!chosen && writtenFor?.paneId === chosen.agent.pane_id && writtenFor.cwd === chosen.agent.cwd;
+  // Untouched prefill follows the picker; once the user has edited the text
+  // it is theirs, and only "Rewrite for this agent" replaces it.
+  const untouched = prompt === defendPrompt(root, findings, writtenFor);
+  const pick = (next: string) => {
+    setPaneId(next);
+    if (untouched) writeFor(eligible.find(t => t.agent.pane_id === next));
+  };
+  const current = !!chosen && writtenFor === chosen.agent.cwd;
   const promptLength = Array.from(prompt).length;
   const validPrompt = prompt.trim().length > 0 && promptLength <= MAX_PROMPT_CHARS;
   const worktree = chosen && chosen.agent.cwd !== root ? chosen.agent.cwd : null;
@@ -91,7 +96,7 @@ export function DefendComposer({ root, findings, targets, connected, onClose, on
         {!eligible.length && <p className="trade-warning">Start an agent in this project first, then return to send it.</p>}
         {worktree !== null && <p className="trade-small" data-testid="defend-worktree-note">This agent works in <code>{worktree}</code>. The ships sink once the fix reaches <code>{root}</code>.</p>}
         <label className="trade-field">Message the agent will receive<textarea className="trade-prompt" ref={promptRef} value={prompt} onChange={e => setPrompt(e.target.value)} disabled={busy} spellCheck={false} /></label>
-        {chosen && !current && <p className="trade-warning" role="alert">This agent moved since the message was written. <button type="button" onClick={() => writeFor(chosen)}>Rewrite for this agent</button></p>}
+        {chosen && !current && <p className="trade-warning" role="alert">This message was written {writtenFor === null ? "before an agent was chosen" : <>for <code>{writtenFor}</code></>}; this agent works in <code>{chosen.agent.cwd}</code>. <button type="button" onClick={() => writeFor(chosen)}>Rewrite for this agent</button></p>}
         {promptLength > MAX_PROMPT_CHARS && <p className="trade-warning" role="alert">The message must fit within 20,000 characters.</p>}
         {previewDisabled && <p className="trade-warning">{DEFEND_PREVIEW_NOTE}</p>}
       </>}

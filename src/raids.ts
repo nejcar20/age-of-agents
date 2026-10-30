@@ -183,7 +183,9 @@ export function defendPrompt(root: string, findings: Finding[], agentCwd: string
   return out.join("\n");
 }
 
-const findingKey = (f: Finding) => `${f.id}\u0000${f.package}\u0000${f.lockfile}`;
+/** One finding's identity across scans (and across UI rows): the same
+ * advisory in the same package of the same lockfile. */
+export const findingKey = (f: Finding) => `${f.id}\u0000${f.package}\u0000${f.lockfile}`;
 
 /** Findings present in the previous report but gone after a re-scout — the
  * ships to sink. Only a fresh, completed scan can prove a fix: an unscouted
@@ -204,7 +206,11 @@ export function threatsSummary(report: RaidReport | undefined, nowMs: number = D
     case "unscouted":
       return report.status.reason;
     case "clean":
-      return `Clean, scouted ${formatLastChanged(report.scanned_at, nowMs)}`;
+      // A stale clean scan proves nothing about the lockfiles as they are
+      // now (`showsCleanFlag` raises no flag for it either): it WAS clean.
+      return report.stale
+        ? `Was clean ${formatLastChanged(report.scanned_at, nowMs)} · lockfiles changed since — rescout`
+        : `Clean, scouted ${formatLastChanged(report.scanned_at, nowMs)}`;
     case "raided": {
       const findings = report.status.findings;
       const worst = findings.slice().sort(bySeverity)[0]?.severity;

@@ -4,7 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type { SwitchTarget } from "../agentSwitcher";
 import type { SeaIsland } from "../archipelago";
 import { formatLastChanged } from "../lastChanged";
-import { findingsOf, SEVERITY_COLOR, type Finding, type RaidReport, type Severity } from "../raids";
+import { findingKey, findingsOf, SEVERITY_COLOR, type Finding, type RaidReport, type Severity } from "../raids";
 import { DefendComposer } from "./DefendComposer";
 import { SCOUT_PREVIEW_NOTE } from "./ScoutSheet";
 import { useStartAgentFlow } from "./StartAgent";
@@ -15,7 +15,6 @@ export const START_FIRST_LABEL = "Start an agent first";
 
 /** Worst first, matching the order ships are drawn in. */
 const RANK: Record<Severity, number> = { critical: 0, high: 1, moderate: 2, low: 3, unknown: 4 };
-const findingKey = (f: Finding) => `${f.id}\u0000${f.package}\u0000${f.lockfile}`;
 
 /** A scanner-supplied URL is only ever handed to the OS opener when it is
  * plainly a web page; anything else renders as text. */
@@ -43,6 +42,7 @@ export function RaidPanel({
   onClose,
   onScout,
   scouting,
+  scoutError = null,
   targets,
   connected,
   onOpenTerminal,
@@ -55,6 +55,9 @@ export function RaidPanel({
   onScout: () => void;
   /** This island is being scouted right now. */
   scouting: boolean;
+  /** Why this island's last rescout failed, if it did. Shown here because
+   * the HUD that shows scout errors is not on screen inside a town. */
+  scoutError?: string | null;
   /** Every agent anywhere (`switchTargets`); the composer narrows them. */
   targets: SwitchTarget[];
   connected: boolean;
@@ -136,7 +139,9 @@ export function RaidPanel({
           <p>{report.status.reason}</p>
         </div>
       ) : report.status.kind === "clean" ? (
-        <p className="raid-panel__calm">No known vulnerabilities</p>
+        // Stale: the banner above says the lockfiles changed, and this line
+        // must not claim more than the scan it describes.
+        <p className="raid-panel__calm">{report.stale ? "No known vulnerabilities when last scouted" : "No known vulnerabilities"}</p>
       ) : (
         <ul className="raid-panel__findings">
           {findings.map((f) => (
@@ -183,6 +188,7 @@ export function RaidPanel({
       {report && report.uncovered.length > 0 && (
         <p className="raid-panel__uncovered">Not checked: {report.uncovered.join(", ")}</p>
       )}
+      {scoutError && <p className="island-panel__error" role="alert">Rescout failed: {scoutError}</p>}
       {linkError !== null && <p className="island-panel__error" role="alert">{linkError}</p>}
       {previewDisabled && <p className="island-panel__waiting">{SCOUT_PREVIEW_NOTE}</p>}
       {start.notes}

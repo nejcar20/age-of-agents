@@ -125,3 +125,15 @@ it("scouting is disabled in the browser preview", () => {
   expect(button.disabled).toBe(true);
   expect(screen.getByText("Scouting is disabled in the preview.")).toBeTruthy();
 });
+
+it("a stale clean report does not claim the island is clean now", () => {
+  render(<RaidPanel {...props({ report: report({ status: { kind: "clean" }, stale: true }) })} />);
+  expect(screen.getByText("The lockfiles changed since this scout — rescout")).toBeTruthy();
+  expect(screen.queryByText("No known vulnerabilities")).toBeNull();
+  expect(screen.getByText("No known vulnerabilities when last scouted")).toBeTruthy();
+});
+
+it("shows a failed rescout of this island as an alert", () => {
+  render(<RaidPanel {...props({ scoutError: "osv-scanner exited with status 2" })} />);
+  expect(screen.getByRole("alert").textContent).toContain("osv-scanner exited with status 2");
+});

@@ -98,3 +98,34 @@ it("sending is disabled in the browser preview", () => {
   expect(sendPrompt).not.toHaveBeenCalled();
   expect(screen.getByText(DEFEND_PREVIEW_NOTE)).toBeTruthy();
 });
+
+it("keeps the user's edits when another agent (or the placeholder) is picked", () => {
+  const worktreeAgent = target({ pane_id: "w1:p2", title: "Fixer", cwd: "/wt/fix-deps", is_worktree: true });
+  render(<DefendComposer {...props({ targets: [target(), worktreeAgent] })} />);
+  // Untouched prefill follows the agent.
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "w1:p2" } });
+  expect(message().value).toContain("/wt/fix-deps");
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "w1:p1" } });
+  expect(message().value).not.toContain("/wt/fix-deps");
+  // Once edited, the text is the user's.
+  fireEvent.change(message(), { target: { value: "My own orders" } });
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "" } });
+  expect(message().value).toBe("My own orders");
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "w1:p2" } });
+  expect(message().value).toBe("My own orders");
+  // Written for a different checkout: not sendable until explicitly rewritten.
+  const send = screen.getByRole("button", { name: "Send to agent" }) as HTMLButtonElement;
+  expect(send.disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Rewrite for this agent" }));
+  expect(message().value).toContain("/wt/fix-deps");
+  expect(send.disabled).toBe(false);
+  expect(sendPrompt).not.toHaveBeenCalled();
+});
+
+it("edited text stays sendable to another agent in the same checkout", () => {
+  render(<DefendComposer {...props({ targets: [target(), target({ pane_id: "w1:p3", title: "Second" })] })} />);
+  fireEvent.change(message(), { target: { value: "My own orders" } });
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "w1:p3" } });
+  expect(message().value).toBe("My own orders");
+  expect((screen.getByRole("button", { name: "Send to agent" }) as HTMLButtonElement).disabled).toBe(false);
+});

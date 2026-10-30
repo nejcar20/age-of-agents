@@ -24,7 +24,10 @@ export function useRaids(): {
   scouting: { done: number; total: number } | null;
   error: string | null;
   scoutAll(): Promise<void>;
-  scoutIsland(root: string): Promise<void>;
+  /** Resolves to this scout's own failure message, or `null` on success —
+   * so a caller showing one island (the raid panel) can say it failed even
+   * where the HUD that shows `error` is not on screen (inside a town). */
+  scoutIsland(root: string): Promise<string | null>;
   previous: Map<string, RaidReport>;
 } {
   // One state object so `previous` can be derived from `reports` inside a
@@ -131,14 +134,16 @@ export function useRaids(): {
     }
   }, []);
 
-  const scoutIsland = useCallback(async (root: string) => {
+  const scoutIsland = useCallback(async (root: string): Promise<string | null> => {
     setError(null);
     try {
       // The result also arrives as a `raid-report` event, which is what
       // updates state; awaiting here is only for error reporting.
       await invoke<RaidReport>("scout_island", { root });
+      return null;
     } catch (e) {
       setError(String(e));
+      return String(e);
     }
   }, []);
 

@@ -105,4 +105,22 @@ describe("useRaids", () => {
     await act(async () => { await api.scoutAll(); });
     expect(screen.getByTestId("scouting").textContent).toBe("none");
   });
+
+  it("scout_island_resolves_to_its_own_failure", async () => {
+    setup({ raid_reports: [], raid_scanners: { osv: true, npm: true }, scout_island: new Error("scanner crashed") });
+    render(<Probe />);
+    await waitFor(() => expect(screen.getByTestId("scanners").textContent).toBe("true"));
+    let result: string | null = "unset";
+    await act(async () => { result = await api.scoutIsland("/p/a"); });
+    expect(result).toBe("Error: scanner crashed");
+  });
+
+  it("scout_island_resolves_null_on_success", async () => {
+    setup({ raid_reports: [], raid_scanners: { osv: true, npm: true }, scout_island: rep("/p/a", "clean") });
+    render(<Probe />);
+    await waitFor(() => expect(screen.getByTestId("scanners").textContent).toBe("true"));
+    let result: string | null = "unset";
+    await act(async () => { result = await api.scoutIsland("/p/a"); });
+    expect(result).toBeNull();
+  });
 });

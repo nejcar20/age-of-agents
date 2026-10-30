@@ -10,6 +10,7 @@ import {
   shipsFor,
   sunkFindings,
   threatsSummary,
+  findingKey,
   type Finding,
   type RaidReport,
   type Severity,
@@ -30,12 +31,23 @@ const raided = (findings: Finding[], over: Partial<RaidReport> = {}) =>
   report({ kind: "raided", findings }, over);
 
 describe("raids", () => {
+  it("finding_key_distinguishes_id_package_and_lockfile", () => {
+    const a = finding("X", "high");
+    expect(findingKey(a)).toBe(findingKey({ ...a, summary: "other" }));
+    expect(findingKey(a)).not.toBe(findingKey({ ...a, lockfile: "web/yarn.lock" }));
+    expect(findingKey(a)).not.toBe(findingKey({ ...a, package: "other" }));
+  });
+
   it("threats_summary_names_count_worst_clean_and_reason", () => {
     const now = 1_000_000_000_000;
     const twoDaysAgo = now / 1000 - 2 * 86400;
     expect(threatsSummary(raided([finding("a", "high"), finding("b", "critical"), finding("c", "low")]))).toBe("3 raiders (1 critical)");
     expect(threatsSummary(raided([finding("a", "high")], { stale: true }))).toBe("1 raider (1 high) · lockfiles changed since");
     expect(threatsSummary(report({ kind: "clean" }, { scanned_at: twoDaysAgo }), now)).toBe("Clean, scouted 2 days ago");
+    // Stale clean is NOT clean: the lockfiles changed, so it was only clean.
+    expect(threatsSummary(report({ kind: "clean" }, { scanned_at: twoDaysAgo, stale: true }), now)).toBe(
+      "Was clean 2 days ago · lockfiles changed since — rescout",
+    );
     expect(threatsSummary(report({ kind: "unscouted", reason: "no lockfile" }))).toBe("no lockfile");
     expect(threatsSummary(undefined)).toBe("Not scouted yet");
   });

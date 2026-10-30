@@ -289,16 +289,27 @@ function AtlasAppInner({
   // the very `scoutIsland` call it describes.
   const [rescouting, setRescouting] = useState<ReadonlySet<string>>(() => new Set());
   const scoutIsland = raids.scoutIsland;
+  // And each island's last rescout failure, so the raid panel can show it:
+  // `raids.error` only surfaces in the sea's HUD, which a town does not
+  // have. Cleared when that island is scouted again.
+  const [rescoutErrors, setRescoutErrors] = useState<ReadonlyMap<string, string>>(() => new Map());
   const scoutOne = useCallback(
     (root: string) => {
       setRescouting((current) => new Set(current).add(root));
-      void scoutIsland(root).finally(() =>
+      setRescoutErrors((current) => {
+        if (!current.has(root)) return current;
+        const next = new Map(current);
+        next.delete(root);
+        return next;
+      });
+      void scoutIsland(root).then((failure) => {
         setRescouting((current) => {
           const next = new Set(current);
           next.delete(root);
           return next;
-        }),
-      );
+        });
+        if (failure !== null) setRescoutErrors((current) => new Map(current).set(root, failure));
+      });
     },
     [scoutIsland],
   );
@@ -329,6 +340,7 @@ function AtlasAppInner({
       onClose={() => setRaidRoot(null)}
       onScout={() => scoutOne(raidIsland.view.root)}
       scouting={scoutingRoots.has(raidIsland.view.root)}
+      scoutError={rescoutErrors.get(raidIsland.view.root) ?? null}
       targets={raidTargets}
       connected={world.herdr_connected}
       onOpenTerminal={openTerminalFromRaid}
