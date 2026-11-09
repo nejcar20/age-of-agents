@@ -5,3 +5,8 @@ dist-townshot/
 target/
 # Generated from the local checkout for the development town preview.
 /fixtures/aoa-town.json
+
+# Local secrets and macOS clutter.
+.env
+.env.*
+.DS_Store
